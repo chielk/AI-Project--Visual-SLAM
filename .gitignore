@@ -10,3 +10,9 @@
 *.lai
 *.la
 *.a
+
+# Compiled python files
+*.pyc
+# Images
+*.png
+*.jpg
