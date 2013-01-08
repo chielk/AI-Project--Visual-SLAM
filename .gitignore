@@ -16,3 +16,6 @@
 # Images
 *.png
 *.jpg
+
+# QI-created files
+src/build*
