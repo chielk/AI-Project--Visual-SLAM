@@ -1,0 +1,2 @@
+default:
+	qibuild make src
