@@ -1,4 +1,4 @@
 <qibuild version="1">
-  <defaults />
+  <defaults config="linux" />
   <build />
 </qibuild>

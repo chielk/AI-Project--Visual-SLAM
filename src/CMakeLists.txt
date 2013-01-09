@@ -1,12 +1,17 @@
 cmake_minimum_required(VERSION 2.8)
 project(src)
 
+# this lets you find the qibuild cmake frameworl
 find_package(qibuild)
 
-# Create a executable named src
-# with the source file: main.cpp
-qi_create_bin(src "main.cpp")
+# Here, we create an executable named "getimages" from the cpp file.
+qi_create_bin(getimages getimages.cpp)
 
-# Add a simple test:
-enable_testing()
-qi_create_test(test_src "test.cpp")
+# Here we say that our executable depends on
+# - ALCOMMON (main naoqi lib)
+# - ALVISION (for vision definitions)
+# - OPENCV (display)
+#
+# It automatically links with the corresponding libraries and make their headers
+# available.
+qi_use_lib(getimages ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI)
