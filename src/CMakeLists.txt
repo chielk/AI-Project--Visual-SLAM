@@ -14,4 +14,4 @@ qi_create_bin(getimages getimages.cpp)
 #
 # It automatically links with the corresponding libraries and make their headers
 # available.
-qi_use_lib(getimages ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI)
+qi_use_lib(getimages ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI OPENCV2_IMGPROC OPENCV2_calib3d)
