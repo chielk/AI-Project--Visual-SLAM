@@ -55,22 +55,21 @@ static double computeReprojectionErrors( const vector<vector<cv::Point3f> >& obj
     return std::sqrt(totalErr/totalPoints);
 }
 
-void cameraCalibration(const std::string& robotIp)
+cv::Mat cameraCalibration(const std::string& robotIp)
 {
     ALVideoDeviceProxy camProxy(robotIp, 9559);
-    /**
-    ALMotionProxy motion(robotIp, 9559);
 
-    ALValue jointName = "Body";
-    ALValue stiffness = 1.0f;
-    ALValue time = 1.0f;
-    motion.stiffnessInterpolation(jointName, stiffness, time);
+    //ALMotionProxy motion(robotIp, 9559);
 
-    ALValue names = ALValue::array("HeadPitch", "HeadYaw");
-    ALValue angles = ALValue::array(0.0f, 0.0f);
-    motion.setAngles(names, angles, 0.3f);
-    motion.stiffnessInterpolation(jointName, 0.0f, time);
-    **/
+    //ALValue jointName = "Body";
+    //ALValue stiffness = 1.0f;
+    //ALValue time = 1.0f;
+    //motion.stiffnessInterpolation(jointName, stiffness, time);
+
+    //ALValue names = ALValue::array("HeadPitch", "HeadYaw");
+    //ALValue angles = ALValue::array(0.0f, 0.0f);
+    //motion.setAngles(names, angles, 0.3f);
+    //motion.stiffnessInterpolation(jointName, 0.0f, time);
 
     cv::Size imageSize = cv::Size(640, 480);
     try {
@@ -92,23 +91,20 @@ void cameraCalibration(const std::string& robotIp)
 
     float squareSize = 0.027;
 
-    ALValue img;
-
+    // camera matrix for intrinsic and extrinsic parameters
+    cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
+    cameraMatrix.at<double>(0,0) = 1.0;
 
     /** Main loop. Exit when pressing ESC.*/
-    while (!calibrated)   //((char) cv::waitKey(30) != 27 && !calibrated)
+    while ((char) cv::waitKey(30) != 27)
     {
-        img = camProxy.getImageRemote(clientName);
+        ALValue img = camProxy.getImageRemote(clientName);
         imgHeader.data = (uchar*) img[6].GetBinary();
         camProxy.releaseImage(clientName);
-        cv::imshow("images", imgHeader);
 
         vector<cv::Mat> rvecs, tvecs;
         vector<cv::Point2f> pointBuf;
 
-    	// camera matrix for intrinsic and extrinsic parameters
-        cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
-        cameraMatrix.at<double>(0,0) = 1.0;
         distCoeffs = cv::Mat::zeros(8, 1, CV_64F);
 
         found = cv::findChessboardCorners( imgHeader, 
@@ -136,16 +132,28 @@ void cameraCalibration(const std::string& robotIp)
             // Draw the corners.
             cv::drawChessboardCorners( imgHeader, boardSize, cv::Mat(pointBuf), found );
 
-            // Perform calibration based on
-            double rms = cv::calibrateCamera(objectPoints,
-                                            imagePoints,
-                                            imageSize,
-                                            cameraMatrix,
-                                            distCoeffs,
-                                            rvecs,
-                                            tvecs,
-                                            CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-
+            // Perform calibration based on old values
+            double rms;
+            if(calibrated)
+            {
+                rms = cv::calibrateCamera(objectPoints,
+                                          imagePoints,
+                                          imageSize,
+                                          cameraMatrix,
+                                          distCoeffs,
+                                          rvecs,
+                                          tvecs,
+                                          CV_CALIB_USE_INTRINSIC_GUESS|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+            } else {
+                rms = cv::calibrateCamera(objectPoints,
+                                          imagePoints,
+                                          imageSize,
+                                          cameraMatrix,
+                                          distCoeffs,
+                                          rvecs,
+                                          tvecs,
+                                          CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+            }
             cout << "Re-projection error reported by calibrateCamera: "<< rms << endl;
 
             vector<float> reprojErrs;
@@ -161,12 +169,13 @@ void cameraCalibration(const std::string& robotIp)
 
             calibrated = (cv::checkRange(cameraMatrix) && cv::checkRange(distCoeffs));
         }
+        cv::imshow("images", imgHeader);
     }
 
-
-    while ((char) cv::waitKey(30) != 27)
+    /**
+    while ((char) cv::waitKey(20) != 27)
     {
-        img = camProxy.getImageRemote(clientName);
+        ALValue img = camProxy.getImageRemote(clientName);
         imgHeader.data = (uchar*) img[6].GetBinary();
         camProxy.releaseImage(clientName);
 
@@ -174,6 +183,9 @@ void cameraCalibration(const std::string& robotIp)
         cv::undistort(temp, imgHeader, cameraMatrix, distCoeffs);
         cv::imshow("images", imgHeader);
     }
+    **/
+
+    return cameraMatrix;
 }
 
 void showImages(const std::string& robotIp)
@@ -234,23 +246,48 @@ void showImages(const std::string& robotIp)
 
 int main(int argc, char* argv[])
 {
-  if (argc < 2)
-  {
-    std::cerr << "Usage 'getimages robotIp'" << std::endl;
-    return 1;
-  }
+    if (argc < 2)
+    {
+        std::cerr << "Usage 'getimages robotIp'" << std::endl;
+        return 1;
+    }
 
-  const std::string robotIp(argv[1]);
+    const std::string robotIp(argv[1]);
 
-  try
-  {
-    cameraCalibration(robotIp);
-  }
-  catch (const AL::ALError& e)
-  {
-    std::cerr << "Caught exception " << e.what() << std::endl;
-  }
+    cv::Mat meanIntrinsic = cv::Mat(3, 3, CV_64FC1);
+    cv::Mat cameraMatrix;
+    int N = 5;
 
-  return 0;
+    try
+    {
+        for (int n = 0; n < N; n++)
+        {
+            cameraMatrix = cameraCalibration(robotIp);
+            for (int i = 0 ; i < 3; i ++)
+            {
+                for (int j = 0 ; j < 3; j ++)
+                {
+                    meanIntrinsic.at<double>(i,j) += cameraMatrix.at<double>(i,j);
+                }
+            }
+        }
+
+
+        for (int i = 0 ; i < 3; i ++)
+        {
+            for (int j = 0 ; j < 3; j ++)
+            {
+                cout << meanIntrinsic.at<double>(i,j) / (float)N << "\t";
+            }
+            cout << endl;
+        }
+
+    }
+    catch (const AL::ALError& e)
+    {
+        std::cerr << "Caught exception " << e.what() << std::endl;
+    }
+
+    return 0;
 }
 
