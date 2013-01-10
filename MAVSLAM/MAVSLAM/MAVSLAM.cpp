@@ -1,8 +1,6 @@
 // MAVSLAM.cpp : Defines the entry point for the console application.
 //
 
-#include "stdafx.h"
-#include <cv.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/stitching/stitcher.hpp>
@@ -12,7 +10,7 @@ typedef std::vector<cv::Mat> ImageVector;
 
 #define RED cv::Scalar( 0, 0, 255 )
 
-int _tmain( int argc, _TCHAR* argv[] ) {
+int main() {
 	cv::VideoCapture cap( 0 ); // open the default camera
     if ( !cap.isOpened() )  // check if we succeeded
         return -1;

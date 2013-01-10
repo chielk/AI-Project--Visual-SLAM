@@ -108,6 +108,15 @@ void naoCamera::cameraCalibration()
     bool calibrated = false;
     bool found;
 
+    // calibration points storage
+    vector<vector<cv::Point2f> > finalImagePoints;
+    // fill a vector of vectors with 3d-points
+    vector<vector<cv::Point3f> > objectPoints(1);
+    for( int i = 0; i < boardSize.height; ++i )
+        for( int j = 0; j < boardSize.width; ++j )
+            objectPoints[0].push_back(cv::Point3f(float( j*squareSize ), float( i*squareSize ), 0));
+
+
     // board dimension and size
     cv::Size boardSize = cv::Size(8,5);
     float squareSize = 0.027;
@@ -146,47 +155,50 @@ void naoCamera::cameraCalibration()
             vector<vector<cv::Point2f> > imagePoints;
             imagePoints.push_back(pointBuf);
 
-            vector<vector<cv::Point3f> > objectPoints(1);
-            for( int i = 0; i < boardSize.height; ++i )
-                for( int j = 0; j < boardSize.width; ++j )
-                    objectPoints[0].push_back(cv::Point3f(float( j*squareSize ), float( i*squareSize ), 0));
-            objectPoints.resize(imagePoints.size(), objectPoints[0]);
-
             // Draw the corners.
             cv::drawChessboardCorners( imgHeader, boardSize, cv::Mat(pointBuf), found );
 
-            // Perform calibration based on old values, if possible.
-            double rms;
-            try
+            // If c is pressed, add the current chessboard to the image points
+            if (cv::waitKey(30) == 'c')
             {
-                if(calibrated)
+                finalImagePoints.push_back(pointBuf);
+                objectPoints.resize(imagePoints.size(), objectPoints[0]);
+
+                // Perform calibration based on old values, if possible.
+                double rms;
+                try
                 {
-                    rms = cv::calibrateCamera(objectPoints,
-                                              imagePoints,
-                                              imageSize,
-                                              cameraMatrix,
-                                              distCoeffs,
-                                              rvecs,
-                                              tvecs,
-                                              CV_CALIB_USE_INTRINSIC_GUESS|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-                } else {
-                    rms = cv::calibrateCamera(objectPoints,
-                                              imagePoints,
-                                              imageSize,
-                                              cameraMatrix,
-                                              distCoeffs,
-                                              rvecs,
-                                              tvecs,
-                                              CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+                    if(calibrated)
+                    {
+                        // keep updating
+                        rms = cv::calibrateCamera(objectPoints,
+                                                  imagePoints,
+                                                  imageSize,
+                                                  cameraMatrix,
+                                                  distCoeffs,
+                                                  rvecs,
+                                                  tvecs,
+                                                  CV_CALIB_USE_INTRINSIC_GUESS|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+                    } else {
+                        // estimate parameters for the first time
+                        rms = cv::calibrateCamera(objectPoints,
+                                                  imagePoints,
+                                                  imageSize,
+                                                  cameraMatrix,
+                                                  distCoeffs,
+                                                  rvecs,
+                                                  tvecs,
+                                                  CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+                    }
+                    cout << "Re-projection error reported by calibrateCamera: "<< rms << endl;
+                } catch(cv::Exception e) {
+                    // Probably due to wrong distortion coefficients (cam movement?)
                 }
-                cout << "Re-projection error reported by calibrateCamera: "<< rms << endl;
-            } catch(cv::Exception e) {
-                // Probably due to wrong distortion coefficients (cam movement?)
+                calibrated = (cv::checkRange(cameraMatrix) && cv::checkRange(distCoeffs));
             }
 
             vector<float> reprojErrs;
             double totalAvgErr;
-
             totalAvgErr = computeReprojectionErrors(objectPoints,
                                                     imagePoints,
                                                     rvecs,
@@ -194,8 +206,7 @@ void naoCamera::cameraCalibration()
                                                     cameraMatrix,
                                                     distCoeffs,
                                                     reprojErrs);
-
-            calibrated = (cv::checkRange(cameraMatrix) && cv::checkRange(distCoeffs));
+            cout << "Avg re projection error = "  << totalAvgErr ;
         }
         cv::imshow("images", imgHeader);
     }
