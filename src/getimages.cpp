@@ -6,26 +6,22 @@
  * Copyright Aldebaran Robotics
  */
 
-// Aldebaran includes.
-#include <alproxies/alvideodeviceproxy.h>
-#include <alvision/alimage.h>
-#include <alvision/alvisiondefinitions.h>
-#include <alerror/alerror.h>
-#include <alproxies/almotionproxy.h>
+#include "getimages.hpp"
 
-// Opencv includes.
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/calib3d/calib3d.hpp>
+static string matrixToString(cv::Mat matrix)
+{
+    ostringstream out;
 
-#include <iostream>
-#include <string>
-
-using namespace AL;
-using namespace std;
-
-
+    for(int i=0; i<matrix.rows; i++)
+    {
+        for(int j=0; j<matrix.cols; j++)
+        {
+            out << matrix.at<double>(i,j) << "\t";
+        }
+        out << "\n";
+    }
+    return out.str();
+}
 
 static double computeReprojectionErrors( const vector<vector<cv::Point3f> >& objectPoints,
                                          const vector<vector<cv::Point2f> >& imagePoints,
@@ -55,29 +51,56 @@ static double computeReprojectionErrors( const vector<vector<cv::Point3f> >& obj
     return std::sqrt(totalErr/totalPoints);
 }
 
-cv::Mat cameraCalibration(const std::string& robotIp)
+naoCamera::naoCamera(const string& robotIP)
 {
-    ALVideoDeviceProxy camProxy(robotIp, 9559);
+    this->robotIP = robotIP;
 
-    //ALMotionProxy motion(robotIp, 9559);
+    setProxies();
+}
 
-    //ALValue jointName = "Body";
-    //ALValue stiffness = 1.0f;
-    //ALValue time = 1.0f;
-    //motion.stiffnessInterpolation(jointName, stiffness, time);
+void naoCamera::setProxies()
+{
+    camProxy = new ALVideoDeviceProxy(this->robotIP);
+    motProxy = new ALMotionProxy(this->robotIP);
+}
 
-    //ALValue names = ALValue::array("HeadPitch", "HeadYaw");
-    //ALValue angles = ALValue::array(0.0f, 0.0f);
-    //motion.setAngles(names, angles, 0.3f);
-    //motion.stiffnessInterpolation(jointName, 0.0f, time);
+void naoCamera::subscribe(string name, int cameraId=kTopCamera)
+{
+    unsubscribe(name);
+    clientName = camProxy->subscribe(name, kVGA, kYuvColorSpace, 30);
+    camProxy->setActiveCamera(cameraId);
+}
 
-    cv::Size imageSize = cv::Size(640, 480);
-    try {
-          camProxy.unsubscribe("test");
+void naoCamera::unsubscribe(const string name)
+{
+    try
+    {
+        camProxy->unsubscribe(name);
     }
     catch (const AL::ALError& e) { }
-    const std::string clientName = camProxy.subscribe("test", kVGA, kYuvColorSpace, 30);
+}
 
+/**
+void naoCamera::detectBriskFeatures()
+{
+    cv::Ptr<cv::FeatureDetector> detector;
+    detector =  cv::FeatureDetector::create("BRISK");
+
+    // the filename is given some path
+
+    //cv::Mat img = imread(filename, 0);
+    //CV_Assert( !img.empty() );
+
+    //vector<cv::KeyPoint> kp;
+
+    //detector->detect(img, kp);
+}**/
+
+void naoCamera::cameraCalibration()
+{
+    subscribe("test");
+
+    cv::Size imageSize = cv::Size(640, 480);
     cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
     cv::namedWindow("images");
 
@@ -85,10 +108,8 @@ cv::Mat cameraCalibration(const std::string& robotIp)
     bool calibrated = false;
     bool found;
 
-    vector<vector<cv::Point2f> > imagePoints;
-    cv::Mat cameraMatrix, distCoeffs;
-    cv::Size boardSize = cv::Size(5,8);
-
+    // board dimension and size
+    cv::Size boardSize = cv::Size(8,5);
     float squareSize = 0.027;
 
     // camera matrix for intrinsic and extrinsic parameters
@@ -98,9 +119,9 @@ cv::Mat cameraCalibration(const std::string& robotIp)
     /** Main loop. Exit when pressing ESC.*/
     while ((char) cv::waitKey(30) != 27)
     {
-        ALValue img = camProxy.getImageRemote(clientName);
+        ALValue img = camProxy->getImageRemote(clientName);
         imgHeader.data = (uchar*) img[6].GetBinary();
-        camProxy.releaseImage(clientName);
+        camProxy->releaseImage(clientName);
 
         vector<cv::Mat> rvecs, tvecs;
         vector<cv::Point2f> pointBuf;
@@ -122,7 +143,9 @@ cv::Mat cameraCalibration(const std::string& robotIp)
                               cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 30, 0.1 ));
 
             // size of chessboard squares, compute real points in the object
+            vector<vector<cv::Point2f> > imagePoints;
             imagePoints.push_back(pointBuf);
+
             vector<vector<cv::Point3f> > objectPoints(1);
             for( int i = 0; i < boardSize.height; ++i )
                 for( int j = 0; j < boardSize.width; ++j )
@@ -132,29 +155,34 @@ cv::Mat cameraCalibration(const std::string& robotIp)
             // Draw the corners.
             cv::drawChessboardCorners( imgHeader, boardSize, cv::Mat(pointBuf), found );
 
-            // Perform calibration based on old values
+            // Perform calibration based on old values, if possible.
             double rms;
-            if(calibrated)
+            try
             {
-                rms = cv::calibrateCamera(objectPoints,
-                                          imagePoints,
-                                          imageSize,
-                                          cameraMatrix,
-                                          distCoeffs,
-                                          rvecs,
-                                          tvecs,
-                                          CV_CALIB_USE_INTRINSIC_GUESS|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-            } else {
-                rms = cv::calibrateCamera(objectPoints,
-                                          imagePoints,
-                                          imageSize,
-                                          cameraMatrix,
-                                          distCoeffs,
-                                          rvecs,
-                                          tvecs,
-                                          CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+                if(calibrated)
+                {
+                    rms = cv::calibrateCamera(objectPoints,
+                                              imagePoints,
+                                              imageSize,
+                                              cameraMatrix,
+                                              distCoeffs,
+                                              rvecs,
+                                              tvecs,
+                                              CV_CALIB_USE_INTRINSIC_GUESS|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+                } else {
+                    rms = cv::calibrateCamera(objectPoints,
+                                              imagePoints,
+                                              imageSize,
+                                              cameraMatrix,
+                                              distCoeffs,
+                                              rvecs,
+                                              tvecs,
+                                              CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+                }
+                cout << "Re-projection error reported by calibrateCamera: "<< rms << endl;
+            } catch(cv::Exception e) {
+                // Probably due to wrong distortion coefficients (cam movement?)
             }
-            cout << "Re-projection error reported by calibrateCamera: "<< rms << endl;
 
             vector<float> reprojErrs;
             double totalAvgErr;
@@ -172,66 +200,57 @@ cv::Mat cameraCalibration(const std::string& robotIp)
         cv::imshow("images", imgHeader);
     }
 
-    /**
+
     while ((char) cv::waitKey(20) != 27)
     {
-        ALValue img = camProxy.getImageRemote(clientName);
+        ALValue img = camProxy->getImageRemote(clientName);
         imgHeader.data = (uchar*) img[6].GetBinary();
-        camProxy.releaseImage(clientName);
+        camProxy->releaseImage(clientName);
 
         cv::Mat temp = imgHeader.clone();
         cv::undistort(temp, imgHeader, cameraMatrix, distCoeffs);
         cv::imshow("images", imgHeader);
     }
-    **/
 
-    return cameraMatrix;
 }
 
-void showImages(const std::string& robotIp)
+void naoCamera::showImages()
 {
-    ALVideoDeviceProxy camProxy(robotIp, 9559);
-    ALMotionProxy motion(robotIp, 9559);
 
     ALValue jointName = "Body";
     ALValue stiffness = 1.0f;
     ALValue time = 1.0f;
-    motion.stiffnessInterpolation(jointName, stiffness, time);
+    motProxy->stiffnessInterpolation(jointName, stiffness, time);
 
     ALValue names = ALValue::array("HeadPitch", "HeadYaw");
     ALValue angles = ALValue::array(-1.5f, 1.5f);
-    motion.setAngles(names, angles, 0.3f);
+    motProxy->setAngles(names, angles, 0.3f);
 
     jointName = "HeadYaw";
     ALValue targetAngles = AL::ALValue::array(-1.5f, 1.5f);
     ALValue targetTimes = AL::ALValue::array(3.0f, 6.0f);
     bool isAbsolute = true;
 
-    try {
-          camProxy.unsubscribe("test");
-    }
-    catch (const AL::ALError& e) { }
+    motProxy->post.walkTo(0.2, 0, 0);
 
-    motion.post.walkTo(0.2, 0, 0);
 
-    const std::string clientName = camProxy.subscribe("test", kVGA, kYuvColorSpace, 30);
     cv::Mat imgHeader = cv::Mat(cv::Size(640, 480), CV_8UC1);
     cv::namedWindow("images");
   
-    while (motion.walkIsActive())
+    while (motProxy->walkIsActive())
     {
-        if(motion.getAngles(jointName, true).at(0) > 1.4f)
+        if(motProxy->getAngles(jointName, true).at(0) > 1.4f)
         {
-            motion.post.angleInterpolation(jointName, targetAngles, targetTimes, isAbsolute);
+            motProxy->post.angleInterpolation(jointName, targetAngles, targetTimes, isAbsolute);
         }
         int counter = 1;
 
         /** Main loop. Exit when pressing ESC.*/
         while ((char) cv::waitKey(30) != 27)
         {
-            ALValue img = camProxy.getImageRemote(clientName);
+            ALValue img = camProxy->getImageRemote(clientName);
             imgHeader.data = (uchar*) img[6].GetBinary();
-            camProxy.releaseImage(clientName);
+            camProxy->releaseImage(clientName);
 
             char filename[50];
             sprintf(filename, "./images/images%d.png", counter);
@@ -240,8 +259,29 @@ void showImages(const std::string& robotIp)
             cv::imwrite(filename, imgHeader);
             counter++;
         }
-    camProxy.unsubscribe(clientName);
+    camProxy->unsubscribe(clientName);
     }
+}
+
+
+/**
+  * Given image, cameramatrix and distortion coefficients, undistort the image.
+  */
+static cv::Mat undistortImage(cv::Mat image, cv::Mat cameraMatrix, cv::Mat distCoeffs)
+{
+    cv::Mat temp = image.clone();
+    cv::undistort(temp, image, cameraMatrix, distCoeffs);
+    return image;
+}
+
+ostream& operator<<(ostream &strm, const naoCamera &naoCam)
+{
+
+    strm << matrixToString(naoCam.cameraMatrix);
+    strm << "\n";
+    strm << matrixToString(naoCam.distCoeffs);
+
+    return strm;
 }
 
 int main(int argc, char* argv[])
@@ -254,15 +294,21 @@ int main(int argc, char* argv[])
 
     const std::string robotIp(argv[1]);
 
-    cv::Mat meanIntrinsic = cv::Mat(3, 3, CV_64FC1);
-    cv::Mat cameraMatrix;
+    naoCamera naoCam (robotIp);
+
+    cv::Mat meanIntrinsic = cv::Mat(3, 3, CV_64FC1);   
+
     int N = 5;
+
 
     try
     {
+        naoCam.cameraCalibration();
+
+        /**
         for (int n = 0; n < N; n++)
         {
-            cameraMatrix = cameraCalibration(robotIp);
+            naoCam.cameraCalibration(cameraMatrix, distCoeffs);
             for (int i = 0 ; i < 3; i ++)
             {
                 for (int j = 0 ; j < 3; j ++)
@@ -272,16 +318,8 @@ int main(int argc, char* argv[])
             }
         }
 
-
-        for (int i = 0 ; i < 3; i ++)
-        {
-            for (int j = 0 ; j < 3; j ++)
-            {
-                cout << meanIntrinsic.at<double>(i,j) / (float)N << "\t";
-            }
-            cout << endl;
-        }
-
+        **/
+        cout << naoCam;
     }
     catch (const AL::ALError& e)
     {
