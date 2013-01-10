@@ -3,9 +3,9 @@
 
 #include "stdafx.h"
 #include <cv.h>
-#include <opencv2\highgui\highgui.hpp>
-#include <opencv2\features2d\features2d.hpp>
-#include <opencv2\stitching\stitcher.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/features2d/features2d.hpp>
+#include <opencv2/stitching/stitcher.hpp>
 
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 typedef std::vector<cv::Mat> ImageVector;
@@ -19,13 +19,16 @@ int _tmain( int argc, _TCHAR* argv[] ) {
 
     cv::namedWindow( "window", 1 );
 	cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create( "BRISK" );
+	/*
 	ImageVector images;
 	int count = 0;
+	*/
 
 	for (;;)
     {
         cv::Mat frame;
-		/*
+		cap >> frame;
+
 		// Detect features
 		KeyPointVector kpv;
 		detector->detect( frame, kpv );
@@ -39,7 +42,11 @@ int _tmain( int argc, _TCHAR* argv[] ) {
 		std::stringstream ss;
 		ss << "Number of features: " << kpv.size();
 		cv::putText( frame, ss.str(), cv::Point(20,20), 0, 0.5, RED );
-        */
+		cv::imshow( "window", frame );
+
+        if ( cv::waitKey( 100 ) != -1 ) break;
+
+		/*
 		//cv::cvtColor( frame, edges, CV_BGR2BGR );
         //cv::GaussianBlur( edges, edges, cv::Size( 7, 7 ), 1.5, 1.5 );
         //cv::Canny( edges, edges, 0, 30, 3 );
@@ -58,8 +65,9 @@ int _tmain( int argc, _TCHAR* argv[] ) {
         cap >> frame; // get a new frame from camera
 
 		images.push_back( frame.clone() );
-		if ( ++count == 3 ) break;
+		if ( ++count == 3 ) break;*/
     }
+	/*
 	cap.release();
 
 	cv::Mat stitch;
@@ -75,6 +83,7 @@ int _tmain( int argc, _TCHAR* argv[] ) {
 	//stitcher.composePanorama( images, stitch );
 
 	cv::imwrite( "henk.jpg", stitch );
+	*/
 
     // the camera will be deinitialized automatically in VideoCapture destructor
     return 0;
