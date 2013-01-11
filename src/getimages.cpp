@@ -68,7 +68,7 @@ void naoCamera::subscribe(string name, int cameraId=kTopCamera)
 {
     unsubscribe(name);
     clientName = camProxy->subscribe(name, kVGA, kYuvColorSpace, 30);
-    camProxy->setActiveCamera(cameraId);
+    camProxy->setActiveCamera(clientName, cameraId);
 }
 
 void naoCamera::unsubscribe(const string name)
@@ -110,16 +110,16 @@ void naoCamera::cameraCalibration()
 
     // calibration points storage
     vector<vector<cv::Point2f> > finalImagePoints;
+
+    // board dimension and size
+    cv::Size boardSize = cv::Size(8,5);
+    float squareSize = 0.027;
+
     // fill a vector of vectors with 3d-points
     vector<vector<cv::Point3f> > objectPoints(1);
     for( int i = 0; i < boardSize.height; ++i )
         for( int j = 0; j < boardSize.width; ++j )
             objectPoints[0].push_back(cv::Point3f(float( j*squareSize ), float( i*squareSize ), 0));
-
-
-    // board dimension and size
-    cv::Size boardSize = cv::Size(8,5);
-    float squareSize = 0.027;
 
     // camera matrix for intrinsic and extrinsic parameters
     cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
@@ -225,54 +225,106 @@ void naoCamera::cameraCalibration()
 
 }
 
-void naoCamera::showImages()
+/**
+  * Get images and save these, annotated with timestamp and 3d pose estimation.
+  */
+void naoCamera::recordDataSet()
 {
-
     ALValue jointName = "Body";
     ALValue stiffness = 1.0f;
-    ALValue time = 1.0f;
-    motProxy->stiffnessInterpolation(jointName, stiffness, time);
+    motProxy->stiffnessInterpolation(jointName, stiffness, 1.0f);
 
-    ALValue names = ALValue::array("HeadPitch", "HeadYaw");
-    ALValue angles = ALValue::array(-1.5f, 1.5f);
-    motProxy->setAngles(names, angles, 0.3f);
+    ALValue headPitchName = "HeadPitch";
+    ALValue headPitchAngle = 0.0;
+    ALValue headPitchSpeed = 0.5;
+    motProxy->setAngles(headPitchName, headPitchAngle, headPitchSpeed);
 
-    jointName = "HeadYaw";
-    ALValue targetAngles = AL::ALValue::array(-1.5f, 1.5f);
-    ALValue targetTimes = AL::ALValue::array(3.0f, 6.0f);
-    bool isAbsolute = true;
+    ALValue headYawName = "HeadYaw";
+    ALValue headYawAngles = ALValue::array(-1.5f, 1.5f);
+    ALValue headYawTimes = ALValue::array(3, 6);
+    motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
 
-    motProxy->post.walkTo(0.2, 0, 0);
-
-
-    cv::Mat imgHeader = cv::Mat(cv::Size(640, 480), CV_8UC1);
+    cv::Size imageSize = cv::Size(640, 480);
+    cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
     cv::namedWindow("images");
-  
-    while (motProxy->walkIsActive())
+
+    subscribe("dataset");
+
+    ALValue topCamName = "CameraTop";
+    int space = 1; // world coordinates
+    vector<float> camPosition;
+    vector<float> initialCamPosition = motProxy->getPosition(topCamName, space, true);
+
+    time_t start = time(0);
+    double seconds_since_start;
+
+
+    bool doBreak = false;
+    while(!doBreak)
     {
-        if(motProxy->getAngles(jointName, true).at(0) > 1.4f)
+        // get imagedata, show feed
+        ALValue img = camProxy->getImageRemote(clientName);
+        imgHeader.data = (uchar*) img[6].GetBinary();
+        camProxy->releaseImage(clientName);
+
+        camPosition = motProxy->getPosition(topCamName, space, true);
+
+        // determine filename
+        stringstream ss;
+        // find relative positionvector
+        for(size_t i = 0; i < camPosition.size(); ++i)
         {
-            motProxy->post.angleInterpolation(jointName, targetAngles, targetTimes, isAbsolute);
+          if(i != 0)
+            ss << ",";
+          ss << (camPosition[i] - initialCamPosition[i]);
         }
-        int counter = 1;
+        ss << ".png";
+        string positionvec = ss.str();
 
-        /** Main loop. Exit when pressing ESC.*/
-        while ((char) cv::waitKey(30) != 27)
+        // get timestamp
+        seconds_since_start = difftime( time(0), start);
+        char filename[50];
+        int length = sprintf(filename,
+                             "image%.4lf_%s",
+                             seconds_since_start,
+                             (char*)positionvec.c_str());
+
+        cv::imshow("images", imgHeader);
+        cv::imwrite(filename, imgHeader);
+
+        // basic keyboardinterface
+        int c = cv::waitKey(40);
+        switch(c)
         {
-            ALValue img = camProxy->getImageRemote(clientName);
-            imgHeader.data = (uchar*) img[6].GetBinary();
-            camProxy->releaseImage(clientName);
-
-            char filename[50];
-            sprintf(filename, "./images/images%d.png", counter);
-
-            cv::imshow("images", imgHeader);
-            cv::imwrite(filename, imgHeader);
-            counter++;
+        case 27: // esc key
+            motProxy->setWalkTargetVelocity(0, 0, 0, 0);
+            doBreak = true;
+            break;
+        case 28: // right arrow
+            motProxy->setWalkTargetVelocity(0.0, -0.8, 0.0, 1.0);
+            break;
+        case 29: // left arrow
+            motProxy->setWalkTargetVelocity(0.0, 0.8, 0.0, 1.0);
+            break;
+        case 30: // up arrow
+            motProxy->setWalkTargetVelocity(0.8, 0.0, 0.0, 1.0);
+            break;
+        case 31: // down arrow
+            motProxy->setWalkTargetVelocity(-0.8, 0.0, 0.0, 1.0);
+            break;
+        default:
+            motProxy->setWalkTargetVelocity(0, 0, 0, 0);
+            break;
         }
-    camProxy->unsubscribe(clientName);
+
+        // Perform sweep, get images
+        if(motProxy->getAngles(headYawName, true).at(0) > 1.45)
+        {
+            motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
+        }
     }
 }
+
 
 
 /**
@@ -305,32 +357,13 @@ int main(int argc, char* argv[])
 
     const std::string robotIp(argv[1]);
 
-    naoCamera naoCam (robotIp);
-
-    cv::Mat meanIntrinsic = cv::Mat(3, 3, CV_64FC1);   
-
-    int N = 5;
-
-
     try
     {
-        naoCam.cameraCalibration();
 
-        /**
-        for (int n = 0; n < N; n++)
-        {
-            naoCam.cameraCalibration(cameraMatrix, distCoeffs);
-            for (int i = 0 ; i < 3; i ++)
-            {
-                for (int j = 0 ; j < 3; j ++)
-                {
-                    meanIntrinsic.at<double>(i,j) += cameraMatrix.at<double>(i,j);
-                }
-            }
-        }
-
-        **/
-        cout << naoCam;
+        //naoCam.cameraCalibration();
+        //cout << naoCam;
+        naoCamera naoCam (robotIp);
+        naoCam.recordDataSet();
     }
     catch (const AL::ALError& e)
     {

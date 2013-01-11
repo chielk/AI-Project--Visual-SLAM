@@ -17,6 +17,8 @@
 
 #include <iostream>
 #include <string>
+#include <time.h>
+
 
 using namespace AL;
 using namespace std;
@@ -32,12 +34,13 @@ class naoCamera {
     void detectBriskFeatures();
     void setProxies();
 
+
 public:
     naoCamera(const string&);
     void cameraCalibration();
     void showImages();
     cv::Mat cameraMatrix, distCoeffs;
-
+    void recordDataSet();
 };
 
 #endif // GETIMAGES_HPP
