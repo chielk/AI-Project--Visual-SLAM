@@ -236,7 +236,7 @@ void naoCamera::recordDataSet()
     ALValue stiffness = 1.0f;
     motProxy->stiffnessInterpolation(jointName, stiffness, 1.0f);
 
-    sleep(2);
+    this_thread::sleep(posix_time::seconds(2));
 
     motProxy->walkTo(0.1, 0.0, 0.0);
 
