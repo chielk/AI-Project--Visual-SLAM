@@ -286,7 +286,7 @@ void naoCamera::keyboard(bool *doBreak)
                 break;
             }
         }
-        usleep(10000);
+        this_thread::sleep(posix_time::milliseconds(10));
     }
 }
 
@@ -344,7 +344,7 @@ void naoCamera::sweep(bool *doBreak)
         cv::imshow("images", imgHeader);
         cv::imwrite(filename, imgHeader);
 
-        usleep(30000);
+        this_thread::sleep(posix_time::milliseconds(30));
 
         // Perform sweep, get images
         bool sweep = true;
