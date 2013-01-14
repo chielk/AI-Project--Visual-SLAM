@@ -6,6 +6,7 @@ find_package(qibuild)
 
 # Here, we create an executable named "getimages" from the cpp file.
 qi_create_bin(getimages getimages.cpp)
+qi_create_bin(naostream naostream.cpp)
 
 # Here we say that our executable depends on
 # - ALCOMMON (main naoqi lib)
@@ -15,3 +16,4 @@ qi_create_bin(getimages getimages.cpp)
 # It automatically links with the corresponding libraries and make their headers
 # available.
 qi_use_lib(getimages ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI OPENCV2_IMGPROC OPENCV2_calib3d)
+qi_use_lib(naostream ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI OPENCV2_IMGPROC OPENCV2_calib3d OPENCV2_FEATURES2D)
