@@ -246,8 +246,8 @@ void naoCamera::recordDataSet()
     motProxy->setAngles(headPitchName, headPitchAngle, headPitchSpeed);
 
     bool doBreak = false;
-    thread keyboardThread (bind(&naoCamera::keyboard, this, &doBreak));
-    thread sweepThread (bind(&naoCamera::sweep, this, &doBreak));
+    thread keyboardThread (boost::bind(&naoCamera::keyboard, this, &doBreak));
+    thread sweepThread (boost::bind(&naoCamera::sweep, this, &doBreak));
 
     keyboardThread.join();
     sweepThread.join();
