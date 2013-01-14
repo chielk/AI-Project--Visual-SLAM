@@ -20,6 +20,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <math.h>
+#include <boost/thread.hpp>
 
 using namespace boost;
 using namespace AL;
@@ -35,7 +36,8 @@ class naoCamera {
     void subscribe(string, int);
     void detectBriskFeatures();
     void setProxies();
-
+    void sweep(bool *);
+    void keyboard(bool *);
 
 public:
     naoCamera(const string&);
