@@ -1,4 +1,4 @@
 <qibuild version="1">
-  <defaults config="vs2010" />
+  <defaults />
   <build />
 </qibuild>

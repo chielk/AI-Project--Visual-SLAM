@@ -36,14 +36,15 @@ int main( int argc, char* argv[] ) {
     const std::string robotIP( argv[1] );
 	std::string name = "brisk_test";
 
-	cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create( "BRISK" );
+	cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create( "SIFT" );
 
 	AL::ALVideoDeviceProxy *camProxy = new AL::ALVideoDeviceProxy( robotIP );
-	std::string clientName = camProxy->subscribe( name, AL::kVGA, AL::kYuvColorSpace, 30 );
-    camProxy->setActiveCamera(clientName, AL::kTopCamera );
+	std::string clientName = camProxy->subscribe( name, AL::kQVGA, AL::kYuvColorSpace, 30 );
+	
+    camProxy->setActiveCamera(clientName, AL::kBottomCamera );
 
-    while ( (char) cv::waitKey( 30 ) != 27 ) {
-		cv::Mat frame = cv::Mat( cv::Size( 640, 480 ), CV_8UC1 );
+    while ( (char) cv::waitKey( 30 ) == -1 ) {
+		cv::Mat frame = cv::Mat( cv::Size( 320, 240 ), CV_8UC1 );
 
         AL::ALValue img = camProxy->getImageRemote( clientName );
 		frame.data = (uchar*) img[6].GetBinary();
