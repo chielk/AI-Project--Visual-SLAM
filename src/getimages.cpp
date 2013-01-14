@@ -124,6 +124,7 @@ void naoCamera::cameraCalibration()
     // camera matrix for intrinsic and extrinsic parameters
     cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
     cameraMatrix.at<double>(0,0) = 1.0;
+    distCoeffs = cv::Mat::zeros(8, 1, CV_64F);
 
     /** Main loop. Exit when pressing ESC.*/
     while ((char) cv::waitKey(30) != 27)
@@ -134,8 +135,6 @@ void naoCamera::cameraCalibration()
 
         vector<cv::Mat> rvecs, tvecs;
         vector<cv::Point2f> pointBuf;
-
-        distCoeffs = cv::Mat::zeros(8, 1, CV_64F);
 
         found = cv::findChessboardCorners( imgHeader, 
                                            boardSize, 
@@ -162,7 +161,7 @@ void naoCamera::cameraCalibration()
             if (cv::waitKey(30) == 'c')
             {
                 finalImagePoints.push_back(pointBuf);
-                objectPoints.resize(imagePoints.size(), objectPoints[0]);
+                objectPoints.resize(finalImagePoints.size(), objectPoints[0]);
 
                 // Perform calibration based on old values, if possible.
                 double rms;
@@ -172,7 +171,7 @@ void naoCamera::cameraCalibration()
                     {
                         // keep updating
                         rms = cv::calibrateCamera(objectPoints,
-                                                  imagePoints,
+                                                  finalImagePoints,
                                                   imageSize,
                                                   cameraMatrix,
                                                   distCoeffs,
@@ -182,7 +181,7 @@ void naoCamera::cameraCalibration()
                     } else {
                         // estimate parameters for the first time
                         rms = cv::calibrateCamera(objectPoints,
-                                                  imagePoints,
+                                                  finalImagePoints,
                                                   imageSize,
                                                   cameraMatrix,
                                                   distCoeffs,
@@ -195,18 +194,19 @@ void naoCamera::cameraCalibration()
                     // Probably due to wrong distortion coefficients (cam movement?)
                 }
                 calibrated = (cv::checkRange(cameraMatrix) && cv::checkRange(distCoeffs));
-            }
 
-            vector<float> reprojErrs;
-            double totalAvgErr;
-            totalAvgErr = computeReprojectionErrors(objectPoints,
-                                                    imagePoints,
-                                                    rvecs,
-                                                    tvecs,
-                                                    cameraMatrix,
-                                                    distCoeffs,
-                                                    reprojErrs);
-            cout << "Avg re projection error = "  << totalAvgErr ;
+                vector<float> reprojErrs;
+                double totalAvgErr;
+                totalAvgErr = computeReprojectionErrors(objectPoints,
+                                                        finalImagePoints,
+                                                        rvecs,
+                                                        tvecs,
+                                                        cameraMatrix,
+                                                        distCoeffs,
+                                                        reprojErrs);
+                cout << "Avg re projection error = "  << totalAvgErr << endl;
+
+            }
         }
         cv::imshow("images", imgHeader);
     }
@@ -230,9 +230,16 @@ void naoCamera::cameraCalibration()
   */
 void naoCamera::recordDataSet()
 {
+    subscribe("dataset");
+
+
     ALValue jointName = "Body";
     ALValue stiffness = 1.0f;
     motProxy->stiffnessInterpolation(jointName, stiffness, 1.0f);
+
+    sleep(2);
+
+    motProxy->walkTo(0.1, 0.0, 0.0);
 
     ALValue headPitchName = "HeadPitch";
     ALValue headPitchAngle = 0.0;
@@ -241,23 +248,23 @@ void naoCamera::recordDataSet()
 
     ALValue headYawName = "HeadYaw";
     ALValue headYawAngles = ALValue::array(-1.5f, 1.5f);
-    ALValue headYawTimes = ALValue::array(3, 6);
+    ALValue headYawTimes = ALValue::array(5, 10);
     motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
+
 
     cv::Size imageSize = cv::Size(640, 480);
     cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
     cv::namedWindow("images");
-
-    subscribe("dataset");
 
     ALValue topCamName = "CameraTop";
     int space = 1; // world coordinates
     vector<float> camPosition;
     vector<float> initialCamPosition = motProxy->getPosition(topCamName, space, true);
 
-    time_t start = time(0);
+    time_t start = clock();
     double seconds_since_start;
 
+    string clientName = this->clientName;
 
     bool doBreak = false;
     while(!doBreak)
@@ -282,50 +289,63 @@ void naoCamera::recordDataSet()
         string positionvec = ss.str();
 
         // get timestamp
-        seconds_since_start = difftime( time(0), start);
+        seconds_since_start =  ((clock() - start) / CLOCKS_PER_SEC);
         char filename[50];
         int length = sprintf(filename,
-                             "image%.4lf_%s",
+                             "./images/image%.4lf_%s",
                              seconds_since_start,
                              (char*)positionvec.c_str());
 
         cv::imshow("images", imgHeader);
         cv::imwrite(filename, imgHeader);
 
+        usleep(30000);
+
         // basic keyboardinterface
         int c = cv::waitKey(40);
+        cout << c << endl;
         switch(c)
         {
         case 27: // esc key
-            motProxy->setWalkTargetVelocity(0, 0, 0, 0);
+            motProxy->setWalkTargetVelocity(0.0, 0.0, 0.0, 1.0);
             doBreak = true;
             break;
-        case 28: // right arrow
+        case 65363: // right arrow
             motProxy->setWalkTargetVelocity(0.0, -0.8, 0.0, 1.0);
             break;
-        case 29: // left arrow
+        case 65361: // left arrow
             motProxy->setWalkTargetVelocity(0.0, 0.8, 0.0, 1.0);
             break;
-        case 30: // up arrow
+        case 65362: // up arrow
             motProxy->setWalkTargetVelocity(0.8, 0.0, 0.0, 1.0);
             break;
-        case 31: // down arrow
+        case 65364: // down arrow
             motProxy->setWalkTargetVelocity(-0.8, 0.0, 0.0, 1.0);
             break;
-        default:
+        case 's':
             motProxy->setWalkTargetVelocity(0, 0, 0, 0);
             break;
         }
 
         // Perform sweep, get images
-        if(motProxy->getAngles(headYawName, true).at(0) > 1.45)
+        bool sweep = true;
+        ALValue taskList = motProxy->getTaskList();
+        string angleInterpolation("angleInterpolation");
+        for(int i=0; i<taskList.getSize(); i++)
+        {
+            string motionName = taskList[i][0];
+            if(!motionName.compare(angleInterpolation))
+            {
+                sweep = false;
+                break;
+            }
+        }
+        if (sweep)
         {
             motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
         }
     }
 }
-
-
 
 /**
   * Given image, cameramatrix and distortion coefficients, undistort the image.
@@ -360,9 +380,10 @@ int main(int argc, char* argv[])
     try
     {
 
+        naoCamera naoCam (robotIp);
         //naoCam.cameraCalibration();
         //cout << naoCam;
-        naoCamera naoCam (robotIp);
+
         naoCam.recordDataSet();
     }
     catch (const AL::ALError& e)

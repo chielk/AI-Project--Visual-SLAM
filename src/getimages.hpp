@@ -18,8 +18,10 @@
 #include <iostream>
 #include <string>
 #include <time.h>
+#include <stdio.h>
+#include <math.h>
 
-
+using namespace boost;
 using namespace AL;
 using namespace std;
 
