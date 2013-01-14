@@ -232,7 +232,6 @@ void naoCamera::recordDataSet()
 {
     subscribe("dataset");
 
-
     ALValue jointName = "Body";
     ALValue stiffness = 1.0f;
     motProxy->stiffnessInterpolation(jointName, stiffness, 1.0f);
@@ -246,12 +245,54 @@ void naoCamera::recordDataSet()
     ALValue headPitchSpeed = 0.5;
     motProxy->setAngles(headPitchName, headPitchAngle, headPitchSpeed);
 
-    ALValue headYawName = "HeadYaw";
-    ALValue headYawAngles = ALValue::array(-1.5f, 1.5f);
-    ALValue headYawTimes = ALValue::array(5, 10);
-    motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
+    bool doBreak = false;
+    thread keyboardThread (bind(&naoCamera::keyboard, this, &doBreak));
+    thread sweepThread (bind(&naoCamera::sweep, this, &doBreak));
 
+    keyboardThread.join();
+    sweepThread.join();
 
+    cout << "asdasd" << endl;
+}
+
+void naoCamera::keyboard(bool *doBreak)
+{
+    int lastCase = 0;
+    while (!*doBreak)
+    {
+        // basic keyboardinterface
+        int c = cv::waitKey(500);
+        if( c != lastCase || c == -1) {
+            switch(c)
+            {
+            case ESC: // esc key
+                motProxy->setWalkTargetVelocity(0.0, 0.0, 0.0, 1.0);
+                *doBreak = true;
+                break;
+            case RIGHT: // right arrow
+                motProxy->setWalkTargetVelocity(0.0, 0.0, -0.8, 1.0);
+                break;
+            case LEFT: // left arrow
+                motProxy->setWalkTargetVelocity(0.0, 0.0, 0.8, 1.0);
+                break;
+            case UP: // up arrow
+                motProxy->setWalkTargetVelocity(0.8, 0.0, 0.0, 1.0);
+                break;
+            case DOWN: // down arrow
+                motProxy->setWalkTargetVelocity(-0.8, 0.0, 0.0, 1.0);
+                break;
+            default:
+                motProxy->setWalkTargetVelocity(0, 0, 0, 0);
+                break;
+            }
+        }
+        usleep(10000);
+    }
+}
+
+void naoCamera::sweep(bool *doBreak)
+{
+    string clientName = this->clientName;
     cv::Size imageSize = cv::Size(640, 480);
     cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
     cv::namedWindow("images");
@@ -264,11 +305,15 @@ void naoCamera::recordDataSet()
     time_t start = clock();
     double seconds_since_start;
 
-    string clientName = this->clientName;
+    ALValue headYawName = "HeadYaw";
+    ALValue headYawAngles = ALValue::array(-1.5f, 1.5f);
+    ALValue headYawTimes = ALValue::array(5, 10);
+    motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
 
-    bool doBreak = false;
-    while(!doBreak)
+    while(!*doBreak)
     {
+        cout << "sweep" << *doBreak;
+
         // get imagedata, show feed
         ALValue img = camProxy->getImageRemote(clientName);
         imgHeader.data = (uchar*) img[6].GetBinary();
@@ -300,32 +345,6 @@ void naoCamera::recordDataSet()
         cv::imwrite(filename, imgHeader);
 
         usleep(30000);
-
-        // basic keyboardinterface
-        int c = cv::waitKey(40);
-        cout << c << endl;
-        switch(c)
-        {
-        case 27: // esc key
-            motProxy->setWalkTargetVelocity(0.0, 0.0, 0.0, 1.0);
-            doBreak = true;
-            break;
-        case 65363: // right arrow
-            motProxy->setWalkTargetVelocity(0.0, -0.8, 0.0, 1.0);
-            break;
-        case 65361: // left arrow
-            motProxy->setWalkTargetVelocity(0.0, 0.8, 0.0, 1.0);
-            break;
-        case 65362: // up arrow
-            motProxy->setWalkTargetVelocity(0.8, 0.0, 0.0, 1.0);
-            break;
-        case 65364: // down arrow
-            motProxy->setWalkTargetVelocity(-0.8, 0.0, 0.0, 1.0);
-            break;
-        case 's':
-            motProxy->setWalkTargetVelocity(0, 0, 0, 0);
-            break;
-        }
 
         // Perform sweep, get images
         bool sweep = true;

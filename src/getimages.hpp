@@ -1,6 +1,13 @@
 #ifndef GETIMAGES_HPP
 #define GETIMAGES_HPP
 
+#define LEFT    65361
+#define UP      65362
+#define RIGHT   65363
+#define DOWN    65364
+#define ESC     27
+
+
 // Aldebaran includes.
 #include <alproxies/alvideodeviceproxy.h>
 #include <alvision/alimage.h>
@@ -20,6 +27,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <math.h>
+#include <boost/thread.hpp>
 
 using namespace boost;
 using namespace AL;
@@ -35,7 +43,8 @@ class naoCamera {
     void subscribe(string, int);
     void detectBriskFeatures();
     void setProxies();
-
+    void sweep(bool *);
+    void keyboard(bool *);
 
 public:
     naoCamera(const string&);
