@@ -261,24 +261,24 @@ void naoCamera::keyboard(bool *doBreak)
     while (!*doBreak)
     {
         // basic keyboardinterface
-        int c = cv::waitKey(100);
+        int c = cv::waitKey(500);
         if( c != lastCase || c == -1) {
             switch(c)
             {
-            case 27: // esc key
+            case ESC: // esc key
                 motProxy->setWalkTargetVelocity(0.0, 0.0, 0.0, 1.0);
                 *doBreak = true;
                 break;
-            case 65363: // right arrow
-                motProxy->setWalkTargetVelocity(0.0, -0.8, 0.0, 1.0);
+            case RIGHT: // right arrow
+                motProxy->setWalkTargetVelocity(0.0, 0.0, -0.8, 1.0);
                 break;
-            case 65361: // left arrow
-                motProxy->setWalkTargetVelocity(0.0, 0.8, 0.0, 1.0);
+            case LEFT: // left arrow
+                motProxy->setWalkTargetVelocity(0.0, 0.0, 0.8, 1.0);
                 break;
-            case 65362: // up arrow
+            case UP: // up arrow
                 motProxy->setWalkTargetVelocity(0.8, 0.0, 0.0, 1.0);
                 break;
-            case 65364: // down arrow
+            case DOWN: // down arrow
                 motProxy->setWalkTargetVelocity(-0.8, 0.0, 0.0, 1.0);
                 break;
             default:
