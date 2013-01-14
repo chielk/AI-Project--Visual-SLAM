@@ -234,7 +234,7 @@ void naoCamera::recordDataSet()
 
     ALValue jointName = "Body";
     ALValue stiffness = 1.0f;
-    motProxy->stiffnessInterpolation(jointName, stiffness, 1.0f);
+    motProxy->stiffnessInterpolation(jointName, stiffness, 0.1f);
 
     this_thread::sleep(posix_time::seconds(2));
 
@@ -245,29 +245,29 @@ void naoCamera::recordDataSet()
     ALValue headPitchSpeed = 0.5;
     motProxy->setAngles(headPitchName, headPitchAngle, headPitchSpeed);
 
-    bool doBreak = false;
-    thread keyboardThread (bind(&naoCamera::keyboard, this, &doBreak));
-    thread sweepThread (bind(&naoCamera::sweep, this, &doBreak));
+    thread keyboardThread (bind(&naoCamera::keyboard, this));
+    thread sweepThread (bind(&naoCamera::sweep, this));
 
     keyboardThread.join();
     sweepThread.join();
 
-    cout << "asdasd" << endl;
 }
 
-void naoCamera::keyboard(bool *doBreak)
+void naoCamera::keyboard()
 {
+    bool doBreak = false;
     int lastCase = 0;
-    while (!*doBreak)
+    while (!doBreak)
     {
         // basic keyboardinterface
         int c = cv::waitKey(500);
-        if( c != lastCase || c == -1) {
+        if( c != lastCase || c == -1)
+        {
             switch(c)
             {
             case ESC: // esc key
                 motProxy->setWalkTargetVelocity(0.0, 0.0, 0.0, 1.0);
-                *doBreak = true;
+                doBreak = true;
                 break;
             case RIGHT: // right arrow
                 motProxy->setWalkTargetVelocity(0.0, 0.0, -0.8, 1.0);
@@ -282,7 +282,7 @@ void naoCamera::keyboard(bool *doBreak)
                 motProxy->setWalkTargetVelocity(-0.8, 0.0, 0.0, 1.0);
                 break;
             default:
-                motProxy->setWalkTargetVelocity(0, 0, 0, 0);
+                motProxy->setWalkTargetVelocity(0.0, 0.0, 0.0, 0.0);
                 break;
             }
         }
@@ -290,7 +290,7 @@ void naoCamera::keyboard(bool *doBreak)
     }
 }
 
-void naoCamera::sweep(bool *doBreak)
+void naoCamera::sweep()
 {
     string clientName = this->clientName;
     cv::Size imageSize = cv::Size(640, 480);
@@ -310,10 +310,8 @@ void naoCamera::sweep(bool *doBreak)
     ALValue headYawTimes = ALValue::array(5, 10);
     motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
 
-    while(!*doBreak)
+    while(cv::waitKey(30) != ESC)
     {
-        cout << "sweep" << *doBreak;
-
         // get imagedata, show feed
         ALValue img = camProxy->getImageRemote(clientName);
         imgHeader.data = (uchar*) img[6].GetBinary();

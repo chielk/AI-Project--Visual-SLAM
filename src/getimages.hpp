@@ -43,8 +43,8 @@ class naoCamera {
     void subscribe(string, int);
     void detectBriskFeatures();
     void setProxies();
-    void sweep(bool *);
-    void keyboard(bool *);
+    void sweep();
+    void keyboard();
 
 public:
     naoCamera(const string&);
