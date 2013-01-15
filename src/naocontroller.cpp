@@ -44,6 +44,7 @@ public:
     NaoController(std::string robotIp);
     NaoController(std::string robotIp, cv::Mat &cameraMatrix, cv::Mat &distCoeffs);
 
+    void stand();
     void cameraCalibration();
     void showImages();
     void recordDataSet();
@@ -110,7 +111,6 @@ void NaoController::cameraCalibration()
 {
     cv::Size imageSize = cv::Size(640, 480);
     cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
-    cv::namedWindow("images");
 
     // calibration params and variables
     bool calibrated = false;
@@ -233,10 +233,7 @@ void NaoController::cameraCalibration()
     saveSettings(cameraMatrix, distCoeffs);
 }
 
-/**
-  * Get images and save these, annotated with timestamp and 3d pose estimation.
-  */
-void NaoController::recordDataSet()
+void NaoController::stand()
 {
     AL::ALValue jointName = "Body";
     AL::ALValue stiffness = 1.0f;
@@ -244,12 +241,21 @@ void NaoController::recordDataSet()
 
     this_thread::sleep(posix_time::seconds(2));
 
-    motProxy->walkTo(0.1, 0.0, 0.0);
+    motProxy->walkTo(0.01, 0.0, 0.0);
 
     AL::ALValue headPitchName = "HeadPitch";
     AL::ALValue headPitchAngle = 0.0;
     AL::ALValue headPitchSpeed = 0.5;
     motProxy->setAngles(headPitchName, headPitchAngle, headPitchSpeed);
+
+}
+
+/**
+  * Get images and save these, annotated with timestamp and 3d pose estimation.
+  */
+void NaoController::recordDataSet()
+{
+    stand();
 
     thread keyboardThread (bind(&NaoController::keyboard, this));
     thread sweepThread (bind(&NaoController::sweep, this));
@@ -301,7 +307,6 @@ void NaoController::sweep()
 {
     cv::Size imageSize = cv::Size(640, 480);
     cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
-    cv::namedWindow("images");
 
     AL::ALValue topCamName = "CameraTop";
     int space = 1; // world coordinates
@@ -313,7 +318,7 @@ void NaoController::sweep()
     odometryFile.open("images/odometry.txt");
 
     AL::ALValue headYawName = "HeadYaw";
-    AL::ALValue headYawAngles =  AL::ALValue::array(-1.5f, 1.5f);
+    AL::ALValue headYawAngles =  AL::ALValue::array(-1.0f, 1.0f);
     AL::ALValue headYawTimes =  AL::ALValue::array(5, 10);
     motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
 
@@ -369,21 +374,8 @@ void NaoController::sweep()
             motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
         }
     }
-    std::cout << "sweep" << std::endl;
     odometryFile.close();
 }
-
-/*
-std::ostream& operator<<(std::ostream &strm, const NaoController &naoCam)
-{
-
-    strm << matrixToString(naoCam.cameraMatrix);
-    strm << "\n";
-    strm << matrixToString(naoCam.distCoeffs);
-
-    return strm;
-}
-*/
 
 int main(int argc, char* argv[])
 {
@@ -404,30 +396,30 @@ int main(int argc, char* argv[])
         naoCam = new NaoController(robotIp);
     }
 
-    //naoCam.cameraCalibration();
-    //std::cout << naoCam;
-    naoCam->recordDataSet();
-
-    return 0;
-
-    if (argc < 3)
-    {
-        std::cerr << "Usage 'inputsource method argument'" << std::endl;
-        return 1;
-    }
-
     cv::namedWindow("images");
 
-    const std::string method(argv[1]);
-    if(!method.compare("offline"))
-    {
-        const std::string foldername(argv[2]);
-        FileInput input (foldername);
-        cv::imshow("images", input.getNextFrame().img);
-    } else {
-        const std::string robotIp(argv[2]);
-        NaoInput input (robotIp);
-        cv::imshow("images", input.getNextFrame().img);
+    bool halt = false;
+    std::cout << "entering main loop" << std::endl;
+    while(!halt) {
+        switch (cv::waitKey(100)) {
+        case ESC:
+            std::cout << "halt" << std::endl;
+            halt = true;
+            break;
+        case 'c':
+            std::cout << "calibrate" << std::endl;
+            naoCam->cameraCalibration();
+            break;
+        case 's':
+            std::cout << "stand" << std::endl;
+            naoCam->stand();
+            break;
+        case 'r':
+            std::cout << "record" << std::endl;
+            naoCam->recordDataSet();
+            break;
+        }
     }
+
     return 0;
 }
