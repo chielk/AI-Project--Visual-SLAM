@@ -399,7 +399,6 @@ int main(int argc, char* argv[])
     cv::namedWindow("images");
 
     bool halt = false;
-    std::cout << "entering main loop" << std::endl;
     while(!halt) {
         switch (cv::waitKey(100)) {
         case ESC:
@@ -420,6 +419,6 @@ int main(int argc, char* argv[])
             break;
         }
     }
-
+    cv::destroyWindow("images");
     return 0;
 }
