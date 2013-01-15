@@ -37,13 +37,13 @@ int main( int argc, char* argv[] ) {
 
 	std::string name = "brisk_test";
 
-    cv::SiftDescriptorExtractor extractor;
+	cv::SiftDescriptorExtractor extractor;
 	cv::Mat current_descriptors, previous_descriptors;
 	KeyPointVector current_keypoints, previous_keypoints;
 	cv::Mat current_frame = cv::Mat( cv::Size( 320, 240 ), CV_8UC1 );
 	cv::Mat previous_frame = cv::Mat( cv::Size( 320, 240 ), CV_8UC1 );
 
-    cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create( "SIFT" );
+	cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create( "SIFT" );
 
 	cv::Mat K; // TODO: store calibration matrix in K
 
