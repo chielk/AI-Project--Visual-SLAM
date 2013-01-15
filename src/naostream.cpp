@@ -45,10 +45,12 @@ int main( int argc, char* argv[] ) {
 
     cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create( "SIFT" );
 
+	cv::Mat K; // TODO: store calibration matrix in K
+
 	// Startup the webcam listener
 	AL::ALVideoDeviceProxy *camProxy = new AL::ALVideoDeviceProxy( robotIP );
 	std::string clientName = camProxy->subscribe( name, AL::kQVGA, AL::kYuvColorSpace, 30 );	
-    camProxy->setActiveCamera(clientName, AL::kBottomCamera );
+    camProxy->setActiveCamera(clientName, AL::kTopCamera );
 
 	// First frame processing
     AL::ALValue img = camProxy->getImageRemote( clientName );
@@ -71,7 +73,7 @@ int main( int argc, char* argv[] ) {
 
 		// Match descriptor vectors using FLANN matcher
 		cv::FlannBasedMatcher matcher;
-		std::vector< cv::DMatch > matches;
+		std::vector<cv::DMatch> matches;
 		matcher.match( current_descriptors, previous_descriptors, matches );
 
 		double max_dist = 0; 
@@ -86,12 +88,45 @@ int main( int argc, char* argv[] ) {
 
 		// Find the good matches (i.e. whose distance is less than 2*min_dist )
 		std::vector<cv::DMatch> good_matches;
+		std::vector<cv::Point2f> current_points, previous_points;
 
 		for ( int i = 0; i < current_descriptors.rows; i++ ) { 
-			if ( matches[i].distance < 2 * min_dist ) { 
+			if ( matches[i].distance < 2 * min_dist ) {
+				current_points.push_back( current_keypoints[matches[i].queryIdx].pt );
+				previous_points.push_back( previous_keypoints[matches[i].trainIdx].pt );
+
 				good_matches.push_back( matches[i] ); 
 			}
 		}
+
+		// Compute fundamental matrix
+		cv::Mat F = cv::findFundamentalMat( previous_points, current_points );
+
+		//std::cout << F << std::endl;
+
+		// Compute essential matrix
+		cv::Mat E,U,S,V,T,Ra,Rb,W,Z;
+		E = K.inv().t() * F * K;
+
+		// Hartley matrices
+		W = ( cv::Mat_<double>(3,3) << 0,-1, 0, 1, 0, 0, 0, 0, 1 );
+		Z = ( cv::Mat_<double>(3,3) << 0, 1, 0,-1, 0, 0, 0, 0, 0 );
+
+		cv::SVD.compute( E, U, S, V );
+		T = U * Z * U.t();
+		Ra = U * W * V.t();
+		Rb = U * W.t()*V.t();
+		
+		cv::Vec3f t = cv::Vec3f( T.at<int>( cv::Point2d(2,1) ), T.at<int>(0,2), T.at<int>(1,0) );
+
+		// Assure determinant is positive
+		if ( cv::determinant( Ra ) < 0 ) Ra = -Ra;
+		if ( cv::determinant( Rb ) < 0 ) Rb = -Rb;
+
+		// At this point there are 4 possible solutions.
+		// Use majority vote to decide winner
+
+
 
 		// Draw only "good" matches
 		cv::Mat img_matches;
