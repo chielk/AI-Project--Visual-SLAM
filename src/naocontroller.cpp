@@ -1,16 +1,58 @@
 /**
- *
- * This example demonstrates how to get images from the robot remotely and how
- * to display them on your screen using opencv.
- *
- * Copyright Aldebaran Robotics
+ * Morry lam
  */
 
-#include "getimages.hpp"
+#define LEFT    65361
+#define UP      65362
+#define RIGHT   65363
+#define DOWN    65364
+#define ESC     27
 
-static string matrixToString(cv::Mat matrix)
+// Aldebaran includes.
+#include <alproxies/alvideodeviceproxy.h>
+#include <alvision/alimage.h>
+#include <alvision/alvisiondefinitions.h>
+#include <alerror/alerror.h>
+#include <alproxies/almotionproxy.h>
+
+// Opencv includes.
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/features2d/features2d.hpp>
+
+#include <iostream>
+#include <string>
+#include <time.h>
+#include <stdio.h>
+#include <math.h>
+#include <boost/thread.hpp>
+#include <fstream>
+
+#include "inputsource.hpp"
+
+using namespace boost;
+
+class NaoController {
+    void sweep();
+    void keyboard();
+    NaoInput *naoInput;
+    AL::ALMotionProxy *motProxy;
+
+public:
+    NaoController(std::string robotIp);
+    NaoController(std::string robotIp, cv::Mat &cameraMatrix, cv::Mat &distCoeffs);
+
+    void stand();
+    void cameraCalibration();
+    void showImages();
+    void recordDataSet();
+};
+
+static std::string matrixToString(cv::Mat matrix)
 {
-    ostringstream out;
+    std::ostringstream out;
 
     for(int i=0; i<matrix.rows; i++)
     {
@@ -23,15 +65,15 @@ static string matrixToString(cv::Mat matrix)
     return out.str();
 }
 
-static double computeReprojectionErrors( const vector<vector<cv::Point3f> >& objectPoints,
-                                         const vector<vector<cv::Point2f> >& imagePoints,
-                                         const vector<cv::Mat>& rvecs,
-                                         const vector<cv::Mat>& tvecs,
-                                         const cv::Mat& cameraMatrix ,
+static double computeReprojectionErrors( const std::vector<std::vector<cv::Point3f> >& objectPoints,
+                                         const std::vector<std::vector<cv::Point2f> >& imagePoints,
+                                         const std::vector<cv::Mat>& rvecs,
+                                         const std::vector<cv::Mat>& tvecs,
+                                         const cv::Mat& cameraMatrix,
                                          const cv::Mat& distCoeffs,
-                                         vector<float>& perViewErrors)
+                                         std::vector<float>& perViewErrors)
 {
-    vector<cv::Point2f> imagePoints2;
+    std::vector<cv::Point2f> imagePoints2;
     int i, totalPoints = 0;
     double totalErr = 0, err;
     perViewErrors.resize(objectPoints.size());
@@ -51,92 +93,61 @@ static double computeReprojectionErrors( const vector<vector<cv::Point3f> >& obj
     return std::sqrt(totalErr/totalPoints);
 }
 
-naoCamera::naoCamera(const string& robotIP)
+NaoController::NaoController(const std::string robotIp)
 {
-    this->robotIP = robotIP;
-
-    setProxies();
+    this->naoInput = new NaoInput(robotIp);
+    // this->naoInput = new NaoInput(robotIp, cameraMatrix, ...
+    this->motProxy = naoInput->motProxy;
 }
 
-void naoCamera::setProxies()
+NaoController::NaoController(std::string robotIp, cv::Mat &cameraMatrix, cv::Mat &distCoeffs)
 {
-    camProxy = new ALVideoDeviceProxy(this->robotIP);
-    motProxy = new ALMotionProxy(this->robotIP);
+    this->naoInput = new NaoInput(robotIp, "", AL::kTopCamera, cameraMatrix, distCoeffs);
+    // this->naoInput = new NaoInput(robotIp, cameraMatrix, ...
+    this->motProxy = naoInput->motProxy;
 }
 
-void naoCamera::subscribe(string name, int cameraId=kTopCamera)
+void NaoController::cameraCalibration()
 {
-    unsubscribe(name);
-    clientName = camProxy->subscribe(name, kVGA, kYuvColorSpace, 30);
-    camProxy->setActiveCamera(clientName, cameraId);
-}
-
-void naoCamera::unsubscribe(const string name)
-{
-    try
-    {
-        camProxy->unsubscribe(name);
-    }
-    catch (const AL::ALError& e) { }
-}
-
-/**
-void naoCamera::detectBriskFeatures()
-{
-    cv::Ptr<cv::FeatureDetector> detector;
-    detector =  cv::FeatureDetector::create("BRISK");
-
-    // the filename is given some path
-
-    //cv::Mat img = imread(filename, 0);
-    //CV_Assert( !img.empty() );
-
-    //vector<cv::KeyPoint> kp;
-
-    //detector->detect(img, kp);
-}**/
-
-void naoCamera::cameraCalibration()
-{
-    subscribe("test");
-
     cv::Size imageSize = cv::Size(640, 480);
     cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
-    cv::namedWindow("images");
 
     // calibration params and variables
     bool calibrated = false;
     bool found;
 
     // calibration points storage
-    vector<vector<cv::Point2f> > finalImagePoints;
+    std::vector<std::vector<cv::Point2f> > finalImagePoints;
 
     // board dimension and size
     cv::Size boardSize = cv::Size(8,5);
     float squareSize = 0.027;
 
     // fill a vector of vectors with 3d-points
-    vector<vector<cv::Point3f> > objectPoints(1);
+    std::vector<std::vector<cv::Point3f> > objectPoints(1);
     for( int i = 0; i < boardSize.height; ++i )
         for( int j = 0; j < boardSize.width; ++j )
             objectPoints[0].push_back(cv::Point3f(float( j*squareSize ), float( i*squareSize ), 0));
 
     // camera matrix for intrinsic and extrinsic parameters
+    cv::Mat cameraMatrix, distCoeffs;
     cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
     cameraMatrix.at<double>(0,0) = 1.0;
     distCoeffs = cv::Mat::zeros(8, 1, CV_64F);
 
+    Frame frame;
+
     /** Main loop. Exit when pressing ESC.*/
     while ((char) cv::waitKey(30) != 27)
     {
-        ALValue img = camProxy->getImageRemote(clientName);
-        imgHeader.data = (uchar*) img[6].GetBinary();
-        camProxy->releaseImage(clientName);
+        frame = naoInput->getNextFrame();
+        imgHeader = frame.img;
+        //std::cout << frame.img.size().height << std::endl;
 
-        vector<cv::Mat> rvecs, tvecs;
-        vector<cv::Point2f> pointBuf;
+        std::vector<cv::Mat> rvecs, tvecs;
+        std::vector<cv::Point2f> pointBuf;
 
-        found = cv::findChessboardCorners( imgHeader, 
+        found = cv::findChessboardCorners( imgHeader,
                                            boardSize, 
                                            pointBuf,
                                            CV_CALIB_CB_FAST_CHECK | CV_CALIB_CB_NORMALIZE_IMAGE);
@@ -151,7 +162,7 @@ void naoCamera::cameraCalibration()
                               cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 30, 0.1 ));
 
             // size of chessboard squares, compute real points in the object
-            vector<vector<cv::Point2f> > imagePoints;
+            std::vector<std::vector<cv::Point2f> > imagePoints;
             imagePoints.push_back(pointBuf);
 
             // Draw the corners.
@@ -189,13 +200,13 @@ void naoCamera::cameraCalibration()
                                                   tvecs,
                                                   CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
                     }
-                    cout << "Re-projection error reported by calibrateCamera: "<< rms << endl;
+                    std::cout << "Re-projection error reported by calibrateCamera: "<< rms << std::endl;
                 } catch(cv::Exception e) {
                     // Probably due to wrong distortion coefficients (cam movement?)
                 }
                 calibrated = (cv::checkRange(cameraMatrix) && cv::checkRange(distCoeffs));
 
-                vector<float> reprojErrs;
+                std::vector<float> reprojErrs;
                 double totalAvgErr;
                 totalAvgErr = computeReprojectionErrors(objectPoints,
                                                         finalImagePoints,
@@ -204,70 +215,71 @@ void naoCamera::cameraCalibration()
                                                         cameraMatrix,
                                                         distCoeffs,
                                                         reprojErrs);
-                cout << "Avg re projection error = "  << totalAvgErr << endl;
+                std::cout << "Avg re projection error = "  << totalAvgErr << std::endl;
 
             }
         }
         cv::imshow("images", imgHeader);
     }
 
-
     while ((char) cv::waitKey(20) != 27)
     {
-        ALValue img = camProxy->getImageRemote(clientName);
-        imgHeader.data = (uchar*) img[6].GetBinary();
-        camProxy->releaseImage(clientName);
-
-        cv::Mat temp = imgHeader.clone();
-        cv::undistort(temp, imgHeader, cameraMatrix, distCoeffs);
+        frame = naoInput->getNextFrame();
+        imgHeader = frame.img;
+        undistortImage(imgHeader, cameraMatrix, distCoeffs);
         cv::imshow("images", imgHeader);
     }
+
+    saveSettings(cameraMatrix, distCoeffs);
+}
+
+void NaoController::stand()
+{
+    AL::ALValue jointName = "Body";
+    AL::ALValue stiffness = 1.0f;
+    motProxy->stiffnessInterpolation(jointName, stiffness, 0.1f);
+
+    this_thread::sleep(posix_time::seconds(2));
+
+    motProxy->walkTo(0.01, 0.0, 0.0);
+
+    AL::ALValue headPitchName = "HeadPitch";
+    AL::ALValue headPitchAngle = 0.0;
+    AL::ALValue headPitchSpeed = 0.5;
+    motProxy->setAngles(headPitchName, headPitchAngle, headPitchSpeed);
 
 }
 
 /**
   * Get images and save these, annotated with timestamp and 3d pose estimation.
   */
-void naoCamera::recordDataSet()
+void NaoController::recordDataSet()
 {
-    subscribe("dataset");
+    stand();
 
-    ALValue jointName = "Body";
-    ALValue stiffness = 1.0f;
-    motProxy->stiffnessInterpolation(jointName, stiffness, 1.0f);
-
-    this_thread::sleep(posix_time::seconds(2));
-
-    motProxy->walkTo(0.1, 0.0, 0.0);
-
-    ALValue headPitchName = "HeadPitch";
-    ALValue headPitchAngle = 0.0;
-    ALValue headPitchSpeed = 0.5;
-    motProxy->setAngles(headPitchName, headPitchAngle, headPitchSpeed);
-
-    bool doBreak = false;
-    thread keyboardThread (boost::bind(&naoCamera::keyboard, this, &doBreak));
-    thread sweepThread (boost::bind(&naoCamera::sweep, this, &doBreak));
+    thread keyboardThread (bind(&NaoController::keyboard, this));
+    thread sweepThread (bind(&NaoController::sweep, this));
 
     keyboardThread.join();
     sweepThread.join();
 
-    cout << "asdasd" << endl;
 }
 
-void naoCamera::keyboard(bool *doBreak)
+void NaoController::keyboard()
 {
+    bool doBreak = false;
     int lastCase = 0;
-    while (!*doBreak)
+    while (!doBreak)
     {
         // basic keyboardinterface
         int c = cv::waitKey(500);
-        if( c != lastCase || c == -1) {
+        if( c != lastCase || c == -1)
+        {
             switch(c)
             {
             case ESC: // esc key
                 motProxy->setWalkTargetVelocity(0.0, 0.0, 0.0, 1.0);
-                *doBreak = true;
+                doBreak = true;
                 break;
             case RIGHT: // right arrow
                 motProxy->setWalkTargetVelocity(0.0, 0.0, -0.8, 1.0);
@@ -282,77 +294,75 @@ void naoCamera::keyboard(bool *doBreak)
                 motProxy->setWalkTargetVelocity(-0.8, 0.0, 0.0, 1.0);
                 break;
             default:
-                motProxy->setWalkTargetVelocity(0, 0, 0, 0);
+                motProxy->setWalkTargetVelocity(0.0, 0.0, 0.0, 0.0);
                 break;
             }
         }
         this_thread::sleep(posix_time::milliseconds(10));
     }
+    std::cout << "keyboard" << std::endl;
 }
 
-void naoCamera::sweep(bool *doBreak)
+void NaoController::sweep()
 {
-    string clientName = this->clientName;
     cv::Size imageSize = cv::Size(640, 480);
     cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
-    cv::namedWindow("images");
 
-    ALValue topCamName = "CameraTop";
+    AL::ALValue topCamName = "CameraTop";
     int space = 1; // world coordinates
-    vector<float> camPosition;
-    vector<float> initialCamPosition = motProxy->getPosition(topCamName, space, true);
+    std::vector<float> camPosition;
+    std::vector<float> initialCamPosition = motProxy->getPosition(topCamName, space, true);
 
-    time_t start = clock();
-    double seconds_since_start;
+    int counter = 1;
+    std::ofstream odometryFile;
+    odometryFile.open("images/odometry.txt");
 
-    ALValue headYawName = "HeadYaw";
-    ALValue headYawAngles = ALValue::array(-1.5f, 1.5f);
-    ALValue headYawTimes = ALValue::array(5, 10);
+    AL::ALValue headYawName = "HeadYaw";
+    AL::ALValue headYawAngles =  AL::ALValue::array(-1.0f, 1.0f);
+    AL::ALValue headYawTimes =  AL::ALValue::array(5, 10);
     motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
 
-    while(!*doBreak)
-    {
-        cout << "sweep" << *doBreak;
+    Frame frame;
 
+    while(cv::waitKey(30) != ESC)
+    {        
         // get imagedata, show feed
-        ALValue img = camProxy->getImageRemote(clientName);
-        imgHeader.data = (uchar*) img[6].GetBinary();
-        camProxy->releaseImage(clientName);
+        frame = naoInput->getNextFrame();
+        imgHeader = frame.img;
+        camPosition = frame.camPosition;
 
-        camPosition = motProxy->getPosition(topCamName, space, true);
-
-        // determine filename
-        stringstream ss;
         // find relative positionvector
         for(size_t i = 0; i < camPosition.size(); ++i)
         {
           if(i != 0)
-            ss << ",";
-          ss << (camPosition[i] - initialCamPosition[i]);
+            odometryFile << " ";
+          odometryFile << (camPosition[i] - initialCamPosition[i]);
         }
-        ss << ".png";
-        string positionvec = ss.str();
+        odometryFile << std::endl;
 
-        // get timestamp
-        seconds_since_start =  ((clock() - start) / CLOCKS_PER_SEC);
-        char filename[50];
+        char filename[30];
         int length = sprintf(filename,
-                             "./images/image%.4lf_%s",
-                             seconds_since_start,
-                             (char*)positionvec.c_str());
+                             "./images/image_%.4d.png",
+                             counter++);
 
         cv::imshow("images", imgHeader);
-        cv::imwrite(filename, imgHeader);
+        try {
+            cv::imwrite(filename, imgHeader);
+        }
+        catch (std::runtime_error &e) {
+            std::cerr << "Failed to write to file " << filename << ": " << e.what() << std::endl;
+        }
+
 
         this_thread::sleep(posix_time::milliseconds(30));
 
         // Perform sweep, get images
         bool sweep = true;
-        ALValue taskList = motProxy->getTaskList();
-        string angleInterpolation("angleInterpolation");
+        AL::ALValue taskList = motProxy->getTaskList();
+        std::string angleInterpolation("angleInterpolation");
         for(int i=0; i<taskList.getSize(); i++)
         {
-            string motionName = taskList[i][0];
+            std::string motionName = taskList[i][0];
             if(!motionName.compare(angleInterpolation))
             {
                 sweep = false;
@@ -364,52 +374,52 @@ void naoCamera::sweep(bool *doBreak)
             motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
         }
     }
-}
-
-/**
-  * Given image, cameramatrix and distortion coefficients, undistort the image.
-  */
-static cv::Mat undistortImage(cv::Mat image, cv::Mat cameraMatrix, cv::Mat distCoeffs)
-{
-    cv::Mat temp = image.clone();
-    cv::undistort(temp, image, cameraMatrix, distCoeffs);
-    return image;
-}
-
-ostream& operator<<(ostream &strm, const naoCamera &naoCam)
-{
-
-    strm << matrixToString(naoCam.cameraMatrix);
-    strm << "\n";
-    strm << matrixToString(naoCam.distCoeffs);
-
-    return strm;
+    odometryFile.close();
 }
 
 int main(int argc, char* argv[])
 {
-    if (argc < 2)
-    {
-        std::cerr << "Usage 'getimages robotIp'" << std::endl;
+    if (argc < 2) {
+        std::cerr << "Usage: '" << argv[0] << " robotIp'" << std::endl;
         return 1;
     }
 
     const std::string robotIp(argv[1]);
+    NaoController *naoCam;
+    cv::Mat cameraMatrix, distCoeffs;
 
-    try
-    {
-
-        naoCamera naoCam (robotIp);
-        //naoCam.cameraCalibration();
-        //cout << naoCam;
-
-        naoCam.recordDataSet();
+    try {
+        loadSettings(cameraMatrix, distCoeffs);
+        naoCam = new NaoController(robotIp, cameraMatrix, distCoeffs);
+    } catch (std::runtime_error e) {
+        std::cout << "Failed to load file config" << std::endl;
+        naoCam = new NaoController(robotIp);
     }
-    catch (const AL::ALError& e)
-    {
-        std::cerr << "Caught exception " << e.what() << std::endl;
+
+    cv::namedWindow("images");
+
+    bool halt = false;
+    std::cout << "entering main loop" << std::endl;
+    while(!halt) {
+        switch (cv::waitKey(100)) {
+        case ESC:
+            std::cout << "halt" << std::endl;
+            halt = true;
+            break;
+        case 'c':
+            std::cout << "calibrate" << std::endl;
+            naoCam->cameraCalibration();
+            break;
+        case 's':
+            std::cout << "stand" << std::endl;
+            naoCam->stand();
+            break;
+        case 'r':
+            std::cout << "record" << std::endl;
+            naoCam->recordDataSet();
+            break;
+        }
     }
 
     return 0;
 }
-

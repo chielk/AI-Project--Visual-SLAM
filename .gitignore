@@ -13,9 +13,10 @@
 
 # Compiled python files
 *.pyc
+
 # Images
-*.png
-*.jpg
+image/image_*
+image/odometry.txt
 
 # QI-created files
 src/build*
