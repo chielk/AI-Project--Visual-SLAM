@@ -142,7 +142,6 @@ void NaoController::cameraCalibration()
     {
         frame = naoInput->getNextFrame();
         imgHeader = frame.img;
-        //std::cout << frame.img.size().height << std::endl;
 
         std::vector<cv::Mat> rvecs, tvecs;
         std::vector<cv::Point2f> pointBuf;

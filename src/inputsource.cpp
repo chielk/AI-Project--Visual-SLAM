@@ -147,7 +147,6 @@ Frame NaoInput::getNextFrame()
     camProxy->releaseImage(clientName);
 
     undistortImage(imgHeader, cameraMatrix, distortionCoeffs);
-    std::cout << imgHeader.cols << " " << imgHeader.rows << std::endl;
     frame.img = imgHeader.clone();
 
     return frame;
