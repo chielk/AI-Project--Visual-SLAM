@@ -1,7 +1,28 @@
 #include "inputsource.hpp"
 
+void loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
+{
+    const std::string config("config");
+    cv::FileStorage fs (config, cv::FileStorage::READ);
+
+    fs["cameraMatrix"] >> cameraMatrix;
+    fs["distortionCoeffs"] >> distortionCoeffs;
+
+    fs.release();
+}
+
+void saveSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
+{
+    const std::string config("config");
+    cv::FileStorage fs (config, cv::FileStorage::WRITE);
+
+    fs << "cameraMatrix" << cameraMatrix;
+    fs << "distortionCoeffs" << distortionCoeffs;
+
+    fs.release();
+}
+
 /**
-  *
   *
   */
 void undistortImage(cv::Mat &image, cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
