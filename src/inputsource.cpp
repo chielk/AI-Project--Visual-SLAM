@@ -50,7 +50,7 @@ FileInput::~FileInput()
     odometryFile.close();
 }
 
-bool FileInput::getNextFrame(Frame &frame)
+bool FileInput::getFrame(Frame &frame)
 {
     /**
     std::stringstream ss;
@@ -69,14 +69,12 @@ bool FileInput::getNextFrame(Frame &frame)
     **/
     try{
         char filename[30];
-        int length = sprintf(filename,
-                             "%s/image_%.4d.png",
-                             foldername.c_str(),
-                             ++index);
+        sprintf(filename,
+                "%s/image_%.4d.png",
+                foldername.c_str(),
+                ++index);
 
-        cv::Mat image = cv::imread(filename, CV_LOAD_IMAGE_COLOR);
-        frame.img = image;
-
+        frame.img = cv::imread(filename, CV_LOAD_IMAGE_COLOR);
         return true;
     }
     catch (cv::Exception e)
@@ -141,11 +139,10 @@ void NaoInput::unsubscribe(std::string &name)
     catch (const AL::ALError& e) { }
 }
 
-bool NaoInput::getNextFrame(Frame &frame)
+bool NaoInput::getFrame(Frame &frame)
 {
     std::string cameraTop = "CameraTop";
     int space = 1;
-
     std::vector<float> newCameraPosition = this->motProxy->getPosition(cameraTop, space, true);
     //std::vector<float> relativeCameraPosition;
     //for (int i=0; i<6 ; i++)
@@ -165,4 +162,18 @@ bool NaoInput::getNextFrame(Frame &frame)
     frame.img = imgHeader.clone();
 
     return true;
+}
+
+std::string matrixToString(cv::Mat matrix)
+{
+    std::ostringstream out;
+    for(int i=0; i<matrix.rows; i++)
+    {
+        for(int j=0; j<matrix.cols; j++)
+        {
+            out << matrix.at<double>(i,j) << "\t";
+        }
+        out << "\n";
+    }
+    return out.str();
 }

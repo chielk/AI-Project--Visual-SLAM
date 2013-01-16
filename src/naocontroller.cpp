@@ -50,21 +50,6 @@ public:
     void recordDataSet();
 };
 
-static std::string matrixToString(cv::Mat matrix)
-{
-    std::ostringstream out;
-
-    for(int i=0; i<matrix.rows; i++)
-    {
-        for(int j=0; j<matrix.cols; j++)
-        {
-            out << matrix.at<double>(i,j) << "\t";
-        }
-        out << "\n";
-    }
-    return out.str();
-}
-
 static double computeReprojectionErrors( const std::vector<std::vector<cv::Point3f> >& objectPoints,
                                          const std::vector<std::vector<cv::Point2f> >& imagePoints,
                                          const std::vector<cv::Mat>& rvecs,
@@ -138,7 +123,7 @@ void NaoController::cameraCalibration()
     /** Main loop. Exit when pressing ESC.*/
     while ((char) cv::waitKey(30) != 27)
     {
-        naoInput->getNextFrame(frame);
+        naoInput->getFrame(frame);
 
         std::vector<cv::Mat> rvecs, tvecs;
         std::vector<cv::Point2f> pointBuf;
@@ -220,7 +205,7 @@ void NaoController::cameraCalibration()
 
     while ((char) cv::waitKey(20) != 27)
     {
-        naoInput->getNextFrame(frame);
+        naoInput->getFrame(frame);
         undistortImage(frame.img, cameraMatrix, distCoeffs);
         cv::imshow("images", frame.img);
     }
@@ -322,7 +307,7 @@ void NaoController::sweep()
     while(cv::waitKey(30) != ESC)
     {        
         // get imagedata, show feed
-        naoInput->getNextFrame(frame);
+        naoInput->getFrame(frame);
         camPosition = frame.camPosition;
 
         // find relative positionvector
@@ -370,6 +355,7 @@ void NaoController::sweep()
     odometryFile.close();
 }
 
+#define _NAO
 #ifdef _NAO
 int main(int argc, char* argv[])
 {

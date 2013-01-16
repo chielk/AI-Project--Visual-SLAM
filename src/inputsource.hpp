@@ -27,10 +27,10 @@ typedef struct
 class InputSource
 {
 public:
-    virtual bool getNextFrame(Frame &frame) = 0;
+    virtual bool getFrame(Frame &frame) = 0;
 };
 
-class NaoInput : InputSource
+class NaoInput : public InputSource
 {
     std::string clientName;
     cv::Mat cameraMatrix;
@@ -55,13 +55,13 @@ public:
              cv::Mat &cameraMatrix,
              cv::Mat &distortionCoeffs);
     ~NaoInput();
-    bool getNextFrame(Frame &frame);
+    bool getFrame(Frame &frame);
 
     // public property so naocontroller can refer to it
     AL::ALMotionProxy *motProxy;
 };
 
-class FileInput : InputSource
+class FileInput : public InputSource
 {
     int index;
     std::string foldername;
@@ -69,7 +69,7 @@ class FileInput : InputSource
 public:
     FileInput(const std::string foldername);
     ~FileInput();
-    bool getNextFrame(Frame &frame);
+    bool getFrame(Frame &frame);
 };
 
 void undistortImage(cv::Mat &image, cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs);
@@ -85,5 +85,8 @@ typedef struct
 
 void saveSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs);
 void loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs);
+
+std::string matrixToString(cv::Mat);
+
 
 #endif // INPUTSOURCE_H
