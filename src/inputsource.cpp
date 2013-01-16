@@ -39,10 +39,10 @@ void undistortImage(cv::Mat &image, cv::Mat &cameraMatrix, cv::Mat &distortionCo
 FileInput::FileInput(const std::string foldername)
 {
     this->foldername = foldername;
-    index = 0;
-    std::stringstream ss;
-    ss << foldername << "/odometry.txt";
-    odometryFile.open(ss.str().c_str());
+    this->index = 0;
+    //std::stringstream ss;
+    //ss << foldername << "/odometry.txt";
+    //odometryFile.open(ss.str().c_str());
 }
 
 FileInput::~FileInput()
@@ -50,9 +50,14 @@ FileInput::~FileInput()
     odometryFile.close();
 }
 
-Frame FileInput::getNextFrame()
+bool FileInput::getNextFrame(Frame &frame)
 {
-    Frame frame;
+    /**
+    std::stringstream ss;
+    ss << foldername << "/odometry.txt";
+    std::cout << ss.str() << std::endl;
+    odometryFile.open(ss.str().c_str());
+
     float x, y, z, wx, wy, wz;
     if( odometryFile >> x >> y >> z >> wx >> wy >> wz )
     {
@@ -60,12 +65,25 @@ Frame FileInput::getNextFrame()
         std::vector<float> positionVector ( parr, parr + 6 );
         frame.camPosition = positionVector;
 
-        std::stringstream ss;
-        ss << foldername << "/image" <<  index++ << ".png";
-        cv::Mat image = cv::imread(ss.str());
-        frame.img = image;
     }
-    return frame;
+    **/
+    try{
+        char filename[30];
+        int length = sprintf(filename,
+                             "%s/image_%.4d.png",
+                             foldername.c_str(),
+                             ++index);
+
+        cv::Mat image = cv::imread(filename, CV_LOAD_IMAGE_COLOR);
+        frame.img = image;
+
+        return true;
+    }
+    catch (cv::Exception e)
+    {
+        std::cerr << "Something happened" << std::endl;
+        return false;
+    }
 }
 
 NaoInput::NaoInput(const std::string &robotIp)
@@ -110,9 +128,8 @@ NaoInput::~NaoInput()
 void NaoInput::subscribe(std::string name, int cameraId=AL::kTopCamera )
 {
     unsubscribe(name);
-    clientName = camProxy->subscribe(name, AL::kVGA, AL::kYuvColorSpace, 30);
+    clientName = camProxy->subscribeCamera(name, cameraId, AL::kVGA, AL::kRGBColorSpace, 30);
     std::cout << "Subscribed to cameraproxy " << name << "." << std::endl;
-    camProxy->setActiveCamera(clientName, cameraId);
 }
 
 void NaoInput::unsubscribe(std::string &name)
@@ -124,10 +141,8 @@ void NaoInput::unsubscribe(std::string &name)
     catch (const AL::ALError& e) { }
 }
 
-Frame NaoInput::getNextFrame()
+bool NaoInput::getNextFrame(Frame &frame)
 {
-    Frame frame;
-
     std::string cameraTop = "CameraTop";
     int space = 1;
 
@@ -140,7 +155,7 @@ Frame NaoInput::getNextFrame()
     frame.camPosition = newCameraPosition;
 
     // get the image from camera
-    cv::Mat imgHeader = cv::Mat(cv::Size(640, 480), CV_8UC1);
+    cv::Mat imgHeader = cv::Mat(cv::Size(640, 480), CV_8UC3);
 
     AL::ALValue img = camProxy->getImageRemote(clientName);
     imgHeader.data = (uchar*) img[6].GetBinary();
@@ -149,5 +164,5 @@ Frame NaoInput::getNextFrame()
     undistortImage(imgHeader, cameraMatrix, distortionCoeffs);
     frame.img = imgHeader.clone();
 
-    return frame;
+    return true;
 }

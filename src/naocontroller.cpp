@@ -109,9 +109,6 @@ NaoController::NaoController(std::string robotIp, cv::Mat &cameraMatrix, cv::Mat
 
 void NaoController::cameraCalibration()
 {
-    cv::Size imageSize = cv::Size(640, 480);
-    cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
-
     // calibration params and variables
     bool calibrated = false;
     bool found;
@@ -121,6 +118,7 @@ void NaoController::cameraCalibration()
 
     // board dimension and size
     cv::Size boardSize = cv::Size(8,5);
+    cv::Size imageSize = cv::Size(640, 480);
     float squareSize = 0.027;
 
     // fill a vector of vectors with 3d-points
@@ -140,13 +138,11 @@ void NaoController::cameraCalibration()
     /** Main loop. Exit when pressing ESC.*/
     while ((char) cv::waitKey(30) != 27)
     {
-        frame = naoInput->getNextFrame();
-        imgHeader = frame.img;
+        naoInput->getNextFrame(frame);
 
         std::vector<cv::Mat> rvecs, tvecs;
         std::vector<cv::Point2f> pointBuf;
-
-        found = cv::findChessboardCorners( imgHeader,
+        found = cv::findChessboardCorners( frame.img,
                                            boardSize, 
                                            pointBuf,
                                            CV_CALIB_CB_FAST_CHECK | CV_CALIB_CB_NORMALIZE_IMAGE);
@@ -154,7 +150,9 @@ void NaoController::cameraCalibration()
         if (found)
         {
             // improve the found corners' coordinate accuracy for chessboard
-            cv::cornerSubPix( imgHeader,
+            cv::Mat viewGray;
+            cvtColor(frame.img, viewGray, CV_RGB2GRAY);
+            cv::cornerSubPix( viewGray,
                               pointBuf,
                               cv::Size(11,11),
                               cv::Size(-1,-1),
@@ -165,7 +163,7 @@ void NaoController::cameraCalibration()
             imagePoints.push_back(pointBuf);
 
             // Draw the corners.
-            cv::drawChessboardCorners( imgHeader, boardSize, cv::Mat(pointBuf), found );
+            cv::drawChessboardCorners( frame.img, boardSize, cv::Mat(pointBuf), found );
 
             // If c is pressed, add the current chessboard to the image points
             if (cv::waitKey(30) == 'c')
@@ -206,27 +204,25 @@ void NaoController::cameraCalibration()
                 calibrated = (cv::checkRange(cameraMatrix) && cv::checkRange(distCoeffs));
 
                 std::vector<float> reprojErrs;
-                double totalAvgErr;
-                totalAvgErr = computeReprojectionErrors(objectPoints,
-                                                        finalImagePoints,
-                                                        rvecs,
-                                                        tvecs,
-                                                        cameraMatrix,
-                                                        distCoeffs,
-                                                        reprojErrs);
+                double totalAvgErr = computeReprojectionErrors(objectPoints,
+                                                               finalImagePoints,
+                                                               rvecs,
+                                                               tvecs,
+                                                               cameraMatrix,
+                                                               distCoeffs,
+                                                               reprojErrs);
                 std::cout << "Avg re projection error = "  << totalAvgErr << std::endl;
 
             }
         }
-        cv::imshow("images", imgHeader);
+        cv::imshow("images", frame.img);
     }
 
     while ((char) cv::waitKey(20) != 27)
     {
-        frame = naoInput->getNextFrame();
-        imgHeader = frame.img;
-        undistortImage(imgHeader, cameraMatrix, distCoeffs);
-        cv::imshow("images", imgHeader);
+        naoInput->getNextFrame(frame);
+        undistortImage(frame.img, cameraMatrix, distCoeffs);
+        cv::imshow("images", frame.img);
     }
 
     saveSettings(cameraMatrix, distCoeffs);
@@ -317,7 +313,7 @@ void NaoController::sweep()
     odometryFile.open("images/odometry.txt");
 
     AL::ALValue headYawName = "HeadYaw";
-    AL::ALValue headYawAngles =  AL::ALValue::array(-1.0f, 1.0f);
+    AL::ALValue headYawAngles =  AL::ALValue::array(-0.7f, 0.7f);
     AL::ALValue headYawTimes =  AL::ALValue::array(5, 10);
     motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
 
@@ -326,8 +322,7 @@ void NaoController::sweep()
     while(cv::waitKey(30) != ESC)
     {        
         // get imagedata, show feed
-        frame = naoInput->getNextFrame();
-        imgHeader = frame.img;
+        naoInput->getNextFrame(frame);
         camPosition = frame.camPosition;
 
         // find relative positionvector
@@ -344,14 +339,13 @@ void NaoController::sweep()
                              "./images/image_%.4d.png",
                              counter++);
 
-        cv::imshow("images", imgHeader);
+        cv::imshow("images", frame.img);
         try {
-            cv::imwrite(filename, imgHeader);
+            cv::imwrite(filename, frame.img );
         }
         catch (std::runtime_error &e) {
             std::cerr << "Failed to write to file " << filename << ": " << e.what() << std::endl;
         }
-
 
         this_thread::sleep(posix_time::milliseconds(30));
 
@@ -376,6 +370,7 @@ void NaoController::sweep()
     odometryFile.close();
 }
 
+#ifdef _NAO
 int main(int argc, char* argv[])
 {
     if (argc < 2) {
@@ -421,3 +416,30 @@ int main(int argc, char* argv[])
     cv::destroyWindow("images");
     return 0;
 }
+#else
+int main(int argc, char* argv[])
+{
+    if (argc < 2) {
+        std::cerr << "Usage: '" << argv[0] << " foldername'" << std::endl;
+        return 1;
+    }
+
+    const std::string foldername (argv[1]);
+    std::cout << "Trying to read files from folder " << foldername << std::endl;
+    FileInput fileInput (foldername);
+
+    Frame frame;
+    std::string window = "FileInput";
+    cv::namedWindow(window);
+
+    fileInput.getNextFrame(frame);
+    while(frame.img.data && cv::waitKey(100) != ESC )
+    {
+        cv::imshow(window, frame.img);
+        fileInput.getNextFrame(frame);
+    }
+    std::cout << "No more images." << std::endl;
+    cv::destroyWindow(window);
+}
+
+#endif
