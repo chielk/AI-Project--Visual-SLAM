@@ -84,7 +84,7 @@ typedef struct
 } config;
 
 void saveSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs);
-void loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs);
+bool loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs);
 
 std::string matrixToString(cv::Mat);
 

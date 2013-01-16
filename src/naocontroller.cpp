@@ -368,11 +368,9 @@ int main(int argc, char* argv[])
     NaoController *naoCam;
     cv::Mat cameraMatrix, distCoeffs;
 
-    try {
-        loadSettings(cameraMatrix, distCoeffs);
+    if(loadSettings(cameraMatrix, distCoeffs)) {
         naoCam = new NaoController(robotIp, cameraMatrix, distCoeffs);
-    } catch (std::runtime_error e) {
-        std::cout << "Failed to load file config" << std::endl;
+    } else {
         naoCam = new NaoController(robotIp);
     }
 

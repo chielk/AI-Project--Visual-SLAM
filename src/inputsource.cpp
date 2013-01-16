@@ -1,6 +1,6 @@
 #include "inputsource.hpp"
 
-void loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
+bool loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
 {
     const std::string config("config");
     cv::FileStorage fs (config, cv::FileStorage::READ);
@@ -8,7 +8,14 @@ void loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
     fs["cameraMatrix"] >> cameraMatrix;
     fs["distortionCoeffs"] >> distortionCoeffs;
 
+    if(cameraMatrix.empty())
+    {
+        std::cerr << "No config file present" << std::endl;
+        return false;
+    }
+
     fs.release();
+    return true;
 }
 
 void saveSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
@@ -73,6 +80,7 @@ bool FileInput::getFrame(Frame &frame)
                 "%s/image_%.4d.png",
                 foldername.c_str(),
                 ++index);
+        std::cout << index << std::endl;
 
         frame.img = cv::imread(filename, CV_LOAD_IMAGE_COLOR);
         return true;
