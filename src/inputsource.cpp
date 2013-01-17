@@ -1,6 +1,6 @@
 #include "inputsource.hpp"
 
-void loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
+bool loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
 {
     const std::string config("config");
     cv::FileStorage fs (config, cv::FileStorage::READ);
@@ -8,7 +8,14 @@ void loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
     fs["cameraMatrix"] >> cameraMatrix;
     fs["distortionCoeffs"] >> distortionCoeffs;
 
+    if(cameraMatrix.empty())
+    {
+        std::cerr << "No config file present" << std::endl;
+        return false;
+    }
+
     fs.release();
+    return true;
 }
 
 void saveSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
@@ -39,10 +46,10 @@ void undistortImage(cv::Mat &image, cv::Mat &cameraMatrix, cv::Mat &distortionCo
 FileInput::FileInput(const std::string foldername)
 {
     this->foldername = foldername;
-    index = 0;
-    std::stringstream ss;
-    ss << foldername << "/odometry.txt";
-    odometryFile.open(ss.str().c_str());
+    this->index = 0;
+    //std::stringstream ss;
+    //ss << foldername << "/odometry.txt";
+    //odometryFile.open(ss.str().c_str());
 }
 
 FileInput::~FileInput()
@@ -50,9 +57,14 @@ FileInput::~FileInput()
     odometryFile.close();
 }
 
-Frame FileInput::getNextFrame()
+bool FileInput::getFrame(Frame &frame)
 {
-    Frame frame;
+    /**
+    std::stringstream ss;
+    ss << foldername << "/odometry.txt";
+    std::cout << ss.str() << std::endl;
+    odometryFile.open(ss.str().c_str());
+
     float x, y, z, wx, wy, wz;
     if( odometryFile >> x >> y >> z >> wx >> wy >> wz )
     {
@@ -60,12 +72,24 @@ Frame FileInput::getNextFrame()
         std::vector<float> positionVector ( parr, parr + 6 );
         frame.camPosition = positionVector;
 
-        std::stringstream ss;
-        ss << foldername << "/image" <<  index++ << ".png";
-        cv::Mat image = cv::imread(ss.str());
-        frame.img = image;
     }
-    return frame;
+    **/
+    try{
+        char filename[30];
+        sprintf(filename,
+                "%s/image_%.4d.png",
+                foldername.c_str(),
+                ++index);
+        std::cout << index << std::endl;
+
+        frame.img = cv::imread(filename, CV_LOAD_IMAGE_COLOR);
+        return true;
+    }
+    catch (cv::Exception e)
+    {
+        std::cerr << "Something happened" << std::endl;
+        return false;
+    }
 }
 
 NaoInput::NaoInput(const std::string &robotIp)
@@ -110,9 +134,8 @@ NaoInput::~NaoInput()
 void NaoInput::subscribe(std::string name, int cameraId=AL::kTopCamera )
 {
     unsubscribe(name);
-    clientName = camProxy->subscribe(name, AL::kVGA, AL::kYuvColorSpace, 30);
+    clientName = camProxy->subscribeCamera(name, cameraId, AL::kVGA, AL::kRGBColorSpace, 30);
     std::cout << "Subscribed to cameraproxy " << name << "." << std::endl;
-    camProxy->setActiveCamera(clientName, cameraId);
 }
 
 void NaoInput::unsubscribe(std::string &name)
@@ -124,13 +147,10 @@ void NaoInput::unsubscribe(std::string &name)
     catch (const AL::ALError& e) { }
 }
 
-Frame NaoInput::getNextFrame()
+bool NaoInput::getFrame(Frame &frame)
 {
-    Frame frame;
-
     std::string cameraTop = "CameraTop";
     int space = 1;
-
     std::vector<float> newCameraPosition = this->motProxy->getPosition(cameraTop, space, true);
     //std::vector<float> relativeCameraPosition;
     //for (int i=0; i<6 ; i++)
@@ -140,15 +160,28 @@ Frame NaoInput::getNextFrame()
     frame.camPosition = newCameraPosition;
 
     // get the image from camera
-    cv::Mat imgHeader = cv::Mat(cv::Size(640, 480), CV_8UC1);
+    cv::Mat imgHeader = cv::Mat(cv::Size(640, 480), CV_8UC3);
 
     AL::ALValue img = camProxy->getImageRemote(clientName);
     imgHeader.data = (uchar*) img[6].GetBinary();
     camProxy->releaseImage(clientName);
 
     undistortImage(imgHeader, cameraMatrix, distortionCoeffs);
-    std::cout << imgHeader.cols << " " << imgHeader.rows << std::endl;
     frame.img = imgHeader.clone();
 
-    return frame;
+    return true;
+}
+
+std::string matrixToString(cv::Mat matrix)
+{
+    std::ostringstream out;
+    for(int i=0; i<matrix.rows; i++)
+    {
+        for(int j=0; j<matrix.cols; j++)
+        {
+            out << matrix.at<double>(i,j) << "\t";
+        }
+        out << "\n";
+    }
+    return out.str();
 }
