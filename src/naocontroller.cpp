@@ -252,8 +252,8 @@ void NaoController::recordDataSet()
 
 #ifdef _USE_POSIX
 	 pthread_t keyboardThread, sweepThread;
-	 pthread_create(&keyboardThread, NULL, (void *(*)(void *)) &(NaoController::keyboard), this);
-	 pthread_create(&sweepThread, NULL, (void *(*)(void *)) &(NaoController::sweep), this);
+	 pthread_create(&keyboardThread, NULL, (void *(*)(void *)) &NaoController::keyboard, this);
+	 pthread_create(&sweepThread, NULL, (void *(*)(void *)) &NaoController::sweep, this);
 	 pthread_join(keyboardThread, NULL);
 	 pthread_join(sweepThread, NULL);
 #else
