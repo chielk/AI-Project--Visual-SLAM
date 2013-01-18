@@ -134,7 +134,7 @@ NaoInput::~NaoInput()
 void NaoInput::subscribe(std::string name, int cameraId=AL::kTopCamera )
 {
     unsubscribe(name);
-    clientName = camProxy->subscribeCamera(name, cameraId, AL::kVGA, AL::kRGBColorSpace, 30);
+    clientName = camProxy->subscribeCamera(name, cameraId, AL::kVGA, AL::kYuvColorSpace, 30);
     std::cout << "Subscribed to cameraproxy " << name << "." << std::endl;
 }
 
@@ -160,7 +160,7 @@ bool NaoInput::getFrame(Frame &frame)
     frame.camPosition = newCameraPosition;
 
     // get the image from camera
-    cv::Mat imgHeader = cv::Mat(cv::Size(640, 480), CV_8UC3);
+    cv::Mat imgHeader = cv::Mat(cv::Size(640, 480), CV_8UC1);
 
     AL::ALValue img = camProxy->getImageRemote(clientName);
     imgHeader.data = (uchar*) img[6].GetBinary();

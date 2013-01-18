@@ -54,11 +54,17 @@ int main( int argc, char* argv[] ) {
     cv::Size imageSize = cv::Size(640, 480);
     int channels = CV_8UC3;
 
-    cv::SiftDescriptorExtractor extractor;
     cv::Mat current_descriptors, previous_descriptors;
     KeyPointVector current_keypoints, previous_keypoints;
 
-    cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create( "SIFT" );
+    cv::BRISK brisk(60, 4, 1.0f);
+    brisk.create("BRISK");
+
+    //cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create( "BRISK" );
+    //cv::Ptr<cv::DescriptorExtractor> extractor = cv::DescriptorExtractor::create( "BRISK" );
+
+    //cv::Ptr<cv::FeatureDetector> detector = cv::Algorithm::create<cv::FeatureDetector>( "Feature2D.BRISK" );
+    //cv::Ptr<cv::DescriptorExtractor> extractor = cv::Algorithm::create<cv::DescriptorExtractor>( "Feature2D.BRISK" );
 
     // Load calibrationmatrix K (and distortioncoefficients while we're at it).
     cv::Mat K;
@@ -73,8 +79,11 @@ int main( int argc, char* argv[] ) {
     inputSource->getFrame(previous_frame);
 
     // Detect features
-    detector->detect( previous_frame.img, previous_keypoints );
-    extractor.compute( previous_frame.img, previous_keypoints, previous_descriptors );
+    //detector(previous_frame.img, cv::noArray(), previous_keypoints, previous_descriptors);
+    //std::cout << matrixToString()
+
+    brisk.detect( previous_frame.img, previous_keypoints );
+    brisk.compute( previous_frame.img, previous_keypoints, previous_descriptors );
 
     // Hartley matrices
     cv::Mat hartley_W = ( cv::Mat_<double>(3,3) << 0,-1, 0, 1, 0, 0, 0, 0, 1 );
@@ -94,13 +103,15 @@ int main( int argc, char* argv[] ) {
         }
 
         // Detect features
-        detector->detect( current_frame.img, current_keypoints );
-        extractor.compute( current_frame.img, current_keypoints, current_descriptors );
 
+        //detector(current_frame.img, cv::noArray(), current_keypoints, current_descriptors);
+        brisk.detect( current_frame.img, current_keypoints );
+        brisk.compute( current_frame.img, current_keypoints, current_descriptors );
 
         // Match descriptor vectors using FLANN matcher
-        cv::FlannBasedMatcher matcher;
+        cv::FlannBasedMatcher matcher(new cv::flann::LshIndexParams(20,10,2));
         std::vector<cv::DMatch> matches;
+
         matcher.match( current_descriptors, previous_descriptors, matches );
 
         double max_dist = 0;
@@ -120,15 +131,16 @@ int main( int argc, char* argv[] ) {
         cv::Point2f current_centroid( 0, 0 );
         cv::Point2f previous_centroid( 0, 0 );
 
-        double double_min_dist = 2*min_dist;
+        double double_min_dist = 2*min_dist + 10;
         for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
-            if ( match_it->distance < double_min_dist ) {
+            if ( match_it->distance <= double_min_dist ) {
                 current_centroid  += current_keypoints[match_it->queryIdx].pt;
                 previous_centroid += previous_keypoints[match_it->trainIdx].pt;
 
                 good_matches.push_back( *match_it );
             }
         }
+        //good_matches = matches;
 
         // Draw only "good" matches
         cv::Mat img_matches;
@@ -227,8 +239,9 @@ int main( int argc, char* argv[] ) {
         // Use majority vote to decide winner
         
         // create vector containing all 4 solutions
+        /**
         cv::Mat possible_projection[4];
-        cv::hconcat( Ra,  t , possible_projection[0] ); 
+        cv::hconcat( Ra,  t , possible_projection[0] );
         cv::hconcat( Ra, -t , possible_projection[1] ); 
         cv::hconcat( Rb,  t , possible_projection[2] ); 
         cv::hconcat( Rb, -t , possible_projection[3] );
@@ -264,8 +277,8 @@ int main( int argc, char* argv[] ) {
             AX1 = P1 * X;
             BX1 = P2 * X;
             num_inliers = 0;
-            for (int i=0; i<good_matches.size(); i++) {
-                if (AX1.at<double>(2, i) * X.at<double>(3, i)  > 0 && BX1.at<double>(2, i) * X.at<double>(3, i) > 0) {
+            for (int a=0; a<good_matches.size(); a++) {
+                if (AX1.at<double>(2, a) * X.at<double>(3, a)  > 0 && BX1.at<double>(2, a) * X.at<double>(3, a) > 0) {
                     num_inliers++;
 					 }
 				}
@@ -277,12 +290,12 @@ int main( int argc, char* argv[] ) {
         }
 
         std::cout << matrixToString(best_transform);
+        **/
 
         // Assign current values to the previous ones, for the next iteration
         previous_keypoints = current_keypoints;
         previous_frame = current_frame;
         previous_descriptors = current_descriptors;
     }
-
     return 0;
 }
