@@ -27,8 +27,17 @@
 #include <time.h>
 #include <stdio.h>
 #include <math.h>
-#include <boost/thread.hpp>
 #include <fstream>
+
+#define GCC_VERSION (__GNUC__ * 10000 \
+		               + __GNUC_MINOR__ * 100 \
+		               + __GNUC_PATCHLEVEL__)
+#if GCC_VERSION >= 40700
+#define _USE_POSIX
+#include <pthread.h>
+#else
+#include <boost/thread.hpp>
+#endif
 
 #include "inputsource.hpp"
 
@@ -219,7 +228,11 @@ void NaoController::stand()
     AL::ALValue stiffness = 1.0f;
     motProxy->stiffnessInterpolation(jointName, stiffness, 0.1f);
 
+#ifdef _USE_POSIX
+	 sleep(2);
+#else
     this_thread::sleep(posix_time::seconds(2));
+#endif
 
     motProxy->walkTo(0.01, 0.0, 0.0);
 
@@ -237,12 +250,19 @@ void NaoController::recordDataSet()
 {
     stand();
 
+#ifdef _USE_POSIX
+	 pthread_t keyboardThread, sweepThread;
+	 pthread_create(&keyboardThread, NULL, (void *(*)(void *)) &(NaoController::keyboard), this);
+	 pthread_create(&sweepThread, NULL, (void *(*)(void *)) &(NaoController::sweep), this);
+	 pthread_join(keyboardThread, NULL);
+	 pthread_join(sweepThread, NULL);
+#else
     thread keyboardThread (bind(&NaoController::keyboard, this));
     thread sweepThread (bind(&NaoController::sweep, this));
 
     keyboardThread.join();
     sweepThread.join();
-
+#endif
 }
 
 void NaoController::keyboard()
@@ -278,7 +298,11 @@ void NaoController::keyboard()
                 break;
             }
         }
+#ifdef _USE_POSIX
+		  usleep(10000);
+#else
         this_thread::sleep(posix_time::milliseconds(10));
+#endif
     }
     std::cout << "keyboard" << std::endl;
 }
@@ -332,7 +356,11 @@ void NaoController::sweep()
             std::cerr << "Failed to write to file " << filename << ": " << e.what() << std::endl;
         }
 
+#ifdef _USE_POSIX
+		  usleep(30000);
+#else
         this_thread::sleep(posix_time::milliseconds(30));
+#endif
 
         // Perform sweep, get images
         bool sweep = true;
