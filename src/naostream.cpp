@@ -300,8 +300,48 @@ int main( int argc, char* argv[] ) {
             }
         }
 
+
         std::cout << matrixToString( best_transform ) << std::endl;
 
+        // SOLVE THEM SCALE ISSUES for m = 1;
+        cv::Mat A (2 * good_matches.size(), 1, CV_32F, 0.0f);
+        cv::Mat b (2 * good_matches.size(), 1, CV_32F, 0.0f);
+        cv::Point p;
+
+        cv::Mat r1(best_transform(cv::Range(0,1), cv::Range(0,3)));
+        cv::Mat r2(best_transform(cv::Range(1,2), cv::Range(0,3)));
+        cv::Mat r3(best_transform(cv::Range(2,3), cv::Range(0,3)));
+        cv::Mat temp1;
+        cv::Mat temp2;
+        cv::Mat point3D;
+
+        double s_t_u = best_transform.at<double>(0,3);
+        double s_t_v = best_transform.at<double>(1,3);
+        double s_t_w = best_transform.at<double>(1,3);
+
+        int i = 0;
+        for ( match_it = good_matches.begin(); match_it != good_matches.end(); match_it++ ) {
+            p = current_keypoints[match_it->queryIdx].pt;
+            point3D = X(cv::Range(0,3), cv::Range(i/2, i/2+1));
+
+            cv::subtract(r1, r3 * p.x, temp1);
+            cv::subtract(r2, r3 * p.y, temp2);
+
+            // Method 1
+            A.at<float>(i,1) = s_t_w * p.x - s_t_u;
+            b.at<float>(i,1) = ((cv::Mat)(temp1 * point3D)).at<float>(0,0);
+
+            // Method 2
+            A.at<float>(i+1,1) = s_t_w * p.y - s_t_v;
+            b.at<float>(i+1,1) = ((cv::Mat)(temp2 * point3D)).at<float>(0,0);
+
+            // Together, these comprise method 3
+            i = i + 2;
+        }
+
+        A = (A.t() * A).inv() * A.t();
+        double s = ((cv::Mat)(A * b)).at<double>(0,0);
+        std::cout << "Found scale difference: " << s << std::endl;
 
         // Assign current values to the previous ones, for the next iteration
         previous_keypoints = current_keypoints;
