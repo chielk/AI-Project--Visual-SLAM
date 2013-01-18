@@ -1,10 +1,10 @@
 /**
- *
- * This example demonstrates how to get images from the robot remotely and how
- * to display them on your screen using opencv.
- *
- * Copyright Aldebaran Robotics
- */
+*
+* This example demonstrates how to get images from the robot remotely and how
+* to display them on your screen using opencv.
+*
+* Copyright Aldebaran Robotics
+*/
 
 #include <alproxies/alvideodeviceproxy.h>
 #include <alvision/alimage.h>
@@ -79,10 +79,7 @@ int main( int argc, char* argv[] ) {
     inputSource->getFrame(previous_frame);
 
     // Detect features
-    //detector(previous_frame.img, cv::noArray(), previous_keypoints, previous_descriptors);
-    //std::cout << matrixToString()
-
-    brisk.detect( previous_frame.img, previous_keypoints );
+    brisk.detect( previous_frame.img, previous_keypoints );    
     brisk.compute( previous_frame.img, previous_keypoints, previous_descriptors );
 
     // Hartley matrices
@@ -106,7 +103,14 @@ int main( int argc, char* argv[] ) {
 
         //detector(current_frame.img, cv::noArray(), current_keypoints, current_descriptors);
         brisk.detect( current_frame.img, current_keypoints );
+        // TODO : What if zero features found?
+        if(previous_keypoints.size() == 0)
+        {
+            continue;
+        }
+
         brisk.compute( current_frame.img, current_keypoints, current_descriptors );
+
 
         // Match descriptor vectors using FLANN matcher
         cv::FlannBasedMatcher matcher(new cv::flann::LshIndexParams(20,10,2));
@@ -131,7 +135,7 @@ int main( int argc, char* argv[] ) {
         cv::Point2f current_centroid( 0, 0 );
         cv::Point2f previous_centroid( 0, 0 );
 
-        double double_min_dist = 2*min_dist + 10;
+        double double_min_dist = 2*(min_dist + 3);
         for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
             if ( match_it->distance <= double_min_dist ) {
                 current_centroid  += current_keypoints[match_it->queryIdx].pt;
@@ -148,7 +152,7 @@ int main( int argc, char* argv[] ) {
             current_frame.img, current_keypoints, previous_frame.img, previous_keypoints,
             good_matches, img_matches, cv::Scalar::all( -1 ), cv::Scalar::all( -1 ),
             std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS
-        );
+            );
 
         // Show detected matches
         imshow( "Good Matches", img_matches );
@@ -188,23 +192,19 @@ int main( int argc, char* argv[] ) {
             previous_points.push_back( previous_keypoints[match_it->trainIdx].pt * previous_scaling );
         }
 
-        //cv::Mat P = cv::findHomography( previous_points, current_points );        
-        //std::cout << matrixToString( P ) << std::endl;
-
-        
         // Compute transformation matrices
         cv::Mat current_T, previous_T;
         current_T = ( cv::Mat_<double>(3,3) <<
             current_scaling, 0,               -current_scaling * current_centroid.x,
             0,               current_scaling, -current_scaling * current_centroid.y,
             0,               0,               1
-        );
+            );
 
         previous_T = ( cv::Mat_<double>(3,3) <<
             previous_scaling, 0,                -previous_scaling * previous_centroid.x,
             0,                previous_scaling, -previous_scaling * previous_centroid.y,
             0,                0,                1
-        );
+            );
 
         // Compute fundamental matrix
         cv::Mat F = cv::findFundamentalMat( previous_points, current_points );
@@ -220,8 +220,8 @@ int main( int argc, char* argv[] ) {
         cv::SVD::compute( E, W, U, V);
 
         cv::Mat w = ( cv::Mat_<double>(3,3) << W.at<double>(0,0), 0.0, 0.0,
-                                               0.0, W.at<double>(1,0), 0.0,
-                                               0.0, 0.0, W.at<double>(2,0) );
+            0.0, W.at<double>(1,0), 0.0,
+            0.0, 0.0, W.at<double>(2,0) );
         E = U * w * V.t();
 
         // Compute R and T
@@ -229,59 +229,70 @@ int main( int argc, char* argv[] ) {
         T = U * hartley_Z * U.t();
         Ra = U * hartley_W * V.t();
         Rb = U * hartley_W.t() * V.t();
-        t = ( cv::Mat_<double>(1,3) << T.at<double>( cv::Point2d(2,1) ), T.at<double>(0,2), T.at<double>(1,0) );
-
+        t = ( cv::Mat_<double>(3,1) << T.at<double>( cv::Point2d(2,1) ), T.at<double>(0,2), T.at<double>(1,0) );
+       
         // Assure determinant is positive
         if ( cv::determinant( Ra ) < 0 ) Ra = -Ra;
         if ( cv::determinant( Rb ) < 0 ) Rb = -Rb;
 
         // At this point there are 4 possible solutions.
         // Use majority vote to decide winner
-        
+
         // create vector containing all 4 solutions
-        /**
         cv::Mat possible_projection[4];
-        cv::hconcat( Ra,  t , possible_projection[0] );
-        cv::hconcat( Ra, -t , possible_projection[1] ); 
+        cv::hconcat( Ra,  t , possible_projection[0] ); 
+        cv::hconcat( Ra, -1 * t , possible_projection[1] ); 
         cv::hconcat( Rb,  t , possible_projection[2] ); 
-        cv::hconcat( Rb, -t , possible_projection[3] );
+        cv::hconcat( Rb, -1 * t , possible_projection[3] );
 
         int max_inliers = 0;
         int num_inliers = 0;
         cv::Mat best_transform;
 
-        cv::Mat X;
+        cv::Mat X = cv::Mat( 4, good_matches.size(), CV_64F, cv::Scalar( 1 ) );
+
         for ( int i = 0; i < 4; i++ ) {
             // Get the number of inliers
-
-            cv::Mat P1( 3, 4, CV_8UC1 );
-            cv::Mat P2( 3, 4, CV_8UC1 );
-            cv::Mat J( 4, 4, CV_8UC1 );
+            cv::Mat J = ( cv::Mat_<double>( 4, 4 ) << 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 );
             cv::Mat U, S, V;
-            cv::hconcat(K, cv::Mat::zeros(3, 1, CV_8UC1), P1);
 
+            cv::Mat P1;
+            cv::hconcat( K, (cv::Mat) ( cv::Mat_<double>(3,1) << 0, 0, 0 ), P1 );
 
-            for (int m=0; m < (int) good_matches.size(); m++) {
-                for (int j=0; j<4; j++) {
-                    J.at<double>(0, j) = P1.at<double>(2, j) * previous_keypoints[good_matches[m].trainIdx].pt.x - P1.at<double>(0, j);
-                    J.at<double>(1, j) = P1.at<double>(2, j) * previous_keypoints[good_matches[m].trainIdx].pt.y - P1.at<double>(1, j);
-                    J.at<double>(2, j) = P1.at<double>(2, j) * current_keypoints[good_matches[m].queryIdx].pt.x - possible_projection[i].at<double>(0, j);
-                    J.at<double>(3, j) = P1.at<double>(2, j) * current_keypoints[good_matches[m].queryIdx].pt.y - possible_projection[i].at<double>(1, j);
+            // Begin inner loops
+            for ( int m = 0; m < (int) good_matches.size(); m++ ) {
+                cv::Point pp = previous_keypoints[good_matches[m].trainIdx].pt;
+                cv::Point cp = current_keypoints[good_matches[m].queryIdx].pt;
+
+                for ( int j = 0; j < 4; j++ ) {
+                    J.at<double>(0, j) = P1.at<double>(2, j) * pp.x - P1.at<double>(0, j);
+                    J.at<double>(1, j) = P1.at<double>(2, j) * pp.y - P1.at<double>(1, j);
+                    J.at<double>(2, j) = possible_projection[i].at<double>(2, j) * cp.x - possible_projection[i].at<double>(0, j);
+                    J.at<double>(3, j) = possible_projection[i].at<double>(2, j) * cp.y - possible_projection[i].at<double>(1, j);
                 }
+
                 cv::SVD::compute(J, S, U, V);
-                cv::hconcat(V(cv::Range(0,3), cv::Range(3,3)), X);
+                
+                X.at<double>( 0, m ) = V.at<double>( 0, 2 );
+                X.at<double>( 1, m ) = V.at<double>( 1, 2 );
+                X.at<double>( 2, m ) = V.at<double>( 2, 2 );
+
+                //cv::hconcat( V(cv::Range(0,3), cv::Range(3,3)), X );
             }
 
-            cv::Mat AX1(4, 3, CV_8UC1);
-            cv::Mat BX1(4, 3, CV_8UC1);
+            cv::Mat AX1;
+            cv::Mat BX1;
+
             AX1 = P1 * X;
-            BX1 = P2 * X;
+            BX1 = possible_projection[i] * X;
             num_inliers = 0;
-            for (int a=0; a<good_matches.size(); a++) {
-                if (AX1.at<double>(2, a) * X.at<double>(3, a)  > 0 && BX1.at<double>(2, a) * X.at<double>(3, a) > 0) {
+
+            // Calculating inliers
+            for (int j = 0; j < good_matches.size(); j++ ) {
+                if ( AX1.at<double>(2, j) * X.at<double>(3, j)  > 0 && BX1.at<double>(2, j) * X.at<double>(3, j) > 0 ) {
                     num_inliers++;
-					 }
-				}
+                }
+            }
 
             if ( num_inliers > max_inliers ) {
                 max_inliers = num_inliers;
@@ -289,8 +300,8 @@ int main( int argc, char* argv[] ) {
             }
         }
 
-        std::cout << matrixToString(best_transform);
-        **/
+        std::cout << matrixToString( best_transform ) << std::endl;
+
 
         // Assign current values to the previous ones, for the next iteration
         previous_keypoints = current_keypoints;
