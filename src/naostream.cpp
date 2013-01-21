@@ -100,9 +100,8 @@ int main( int argc, char* argv[] ) {
         }
 
         // Detect features
-
-        //detector(current_frame.img, cv::noArray(), current_keypoints, current_descriptors);
         brisk.detect( current_frame.img, current_keypoints );
+
         // TODO : What if zero features found?
         if(previous_keypoints.size() == 0)
         {
@@ -110,7 +109,6 @@ int main( int argc, char* argv[] ) {
         }
 
         brisk.compute( current_frame.img, current_keypoints, current_descriptors );
-
 
         // Match descriptor vectors using FLANN matcher
         cv::FlannBasedMatcher matcher(new cv::flann::LshIndexParams(20,10,2));
@@ -135,7 +133,7 @@ int main( int argc, char* argv[] ) {
         cv::Point2f current_centroid( 0, 0 );
         cv::Point2f previous_centroid( 0, 0 );
 
-        double double_min_dist = 2*(min_dist + 3);
+        double double_min_dist = 2*(min_dist + 20);
         for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
             if ( match_it->distance <= double_min_dist ) {
                 current_centroid  += current_keypoints[match_it->queryIdx].pt;
@@ -144,7 +142,6 @@ int main( int argc, char* argv[] ) {
                 good_matches.push_back( *match_it );
             }
         }
-        //good_matches = matches;
 
         // Draw only "good" matches
         cv::Mat img_matches;
@@ -156,6 +153,8 @@ int main( int argc, char* argv[] ) {
 
         // Show detected matches
         imshow( "Good Matches", img_matches );
+        imwrite("some.png", img_matches);
+
 
         // Normalize the centroids
         int matchesSize = matches.size();
@@ -208,29 +207,32 @@ int main( int argc, char* argv[] ) {
 
         // Compute fundamental matrix
         cv::Mat F = cv::findFundamentalMat( previous_points, current_points );
-
         F = current_T.t() * F * previous_T;
 
         // Compute essential matrix
-        cv::Mat E, S, T, Ra, Rb, Z;
+        cv::Mat E, S, T, Ra, Rb;
         E = K.inv().t() * F * K;
 
+        // Enforce rank 2-ness
         cv::Mat U (3,3, CV_32F);
-        cv::Mat W, V, t;
-        cv::SVD::compute( E, W, U, V);
+        cv::Mat W, Vt, t;
+        cv::SVD::compute( E, W, U, Vt );
 
         cv::Mat w = ( cv::Mat_<double>(3,3) << W.at<double>(0,0), 0.0, 0.0,
             0.0, W.at<double>(1,0), 0.0,
-            0.0, 0.0, W.at<double>(2,0) );
-        E = U * w * V.t();
+            0.0, 0.0, 0.0 );
+        E = U * w * Vt;
 
         // Compute R and T
-        cv::SVD::compute( E, S, U, V );
-        T = U * hartley_Z * U.t();
-        Ra = U * hartley_W * V.t();
-        Rb = U * hartley_W.t() * V.t();
-        t = ( cv::Mat_<double>(3,1) << T.at<double>( cv::Point2d(2,1) ), T.at<double>(0,2), T.at<double>(1,0) );
-       
+        cv::SVD::compute( E, S, U, Vt );
+        Ra = U * hartley_W * Vt;         // Possible transposed error
+        Rb = U * hartley_W.t() * Vt;
+        t = ( cv::Mat_<double>(3,1) << U.at<double>(0,2),
+                                       U.at<double>(1,2),
+                                       U.at<double>(2,2) );
+
+        std::cout << matrixToString(Ra) << "\n\n" << matrixToString(Rb) << std::endl;
+
         // Assure determinant is positive
         if ( cv::determinant( Ra ) < 0 ) Ra = -Ra;
         if ( cv::determinant( Rb ) < 0 ) Rb = -Rb;
@@ -270,9 +272,8 @@ int main( int argc, char* argv[] ) {
                     J.at<double>(2, j) = possible_projection[i].at<double>(2, j) * cp.x - possible_projection[i].at<double>(0, j);
                     J.at<double>(3, j) = possible_projection[i].at<double>(2, j) * cp.y - possible_projection[i].at<double>(1, j);
                 }
-
                 cv::SVD::compute(J, S, U, V);
-                
+
                 X.at<double>( 0, m ) = V.at<double>( 0, 2 );
                 X.at<double>( 1, m ) = V.at<double>( 1, 2 );
                 X.at<double>( 2, m ) = V.at<double>( 2, 2 );
@@ -300,8 +301,8 @@ int main( int argc, char* argv[] ) {
             }
         }
 
-
         std::cout << matrixToString( best_transform ) << std::endl;
+        std::cout << matrixToString(X.t()) << std::endl;
 
         // SOLVE THEM SCALE ISSUES for m = 1;
         cv::Mat A (2 * good_matches.size(), 1, CV_32F, 0.0f);
@@ -339,7 +340,13 @@ int main( int argc, char* argv[] ) {
             i = i + 2;
         }
 
+        std::cout<< A.size().height << " " << A.size().width << std::endl;
+        std::cout<< b.size().height << " " << b.size().width << std::endl;
+
         A = (A.t() * A).inv() * A.t();
+
+        std::cout << matrixToString((cv::Mat)(A*b)) << std::endl;
+
         double s = ((cv::Mat)(A * b)).at<double>(0,0);
         std::cout << "Found scale difference: " << s << std::endl;
 
@@ -348,5 +355,6 @@ int main( int argc, char* argv[] ) {
         previous_frame = current_frame;
         previous_descriptors = current_descriptors;
     }
+
     return 0;
 }

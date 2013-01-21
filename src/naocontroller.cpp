@@ -282,16 +282,16 @@ void NaoController::keyboard()
                 doBreak = true;
                 break;
             case RIGHT: // right arrow
-                motProxy->setWalkTargetVelocity(0.0, 0.0, -0.8, 1.0);
+                motProxy->setWalkTargetVelocity(0.0, 0.0, -0.8, 0.5);
                 break;
             case LEFT: // left arrow
-                motProxy->setWalkTargetVelocity(0.0, 0.0, 0.8, 1.0);
+                motProxy->setWalkTargetVelocity(0.0, 0.0, 0.8, 0.5);
                 break;
             case UP: // up arrow
-                motProxy->setWalkTargetVelocity(0.8, 0.0, 0.0, 1.0);
+                motProxy->setWalkTargetVelocity(0.8, 0.0, 0.0, 0.5);
                 break;
             case DOWN: // down arrow
-                motProxy->setWalkTargetVelocity(-0.8, 0.0, 0.0, 1.0);
+                motProxy->setWalkTargetVelocity(-0.8, 0.0, 0.0, 0.5);
                 break;
             default:
                 motProxy->setWalkTargetVelocity(0.0, 0.0, 0.0, 0.0);
@@ -310,7 +310,7 @@ void NaoController::keyboard()
 void NaoController::sweep()
 {
     cv::Size imageSize = cv::Size(640, 480);
-    cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC1);
+    cv::Mat imgHeader = cv::Mat(imageSize, CV_8UC3);
 
     AL::ALValue topCamName = "CameraTop";
     int space = 1; // world coordinates
@@ -322,10 +322,9 @@ void NaoController::sweep()
     odometryFile.open("images/odometry.txt");
 
     AL::ALValue headYawName = "HeadYaw";
-    AL::ALValue headYawAngles =  AL::ALValue::array(-0.7f, 0.7f);
+    AL::ALValue headYawAngles =  AL::ALValue::array(-0.3f, 0.3f);
     AL::ALValue headYawTimes =  AL::ALValue::array(5, 10);
     motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
-
     Frame frame;
 
     while(cv::waitKey(30) != ESC)
@@ -344,9 +343,7 @@ void NaoController::sweep()
         odometryFile << std::endl;
 
         char filename[30];
-        int length = sprintf(filename,
-                             "./images/image_%.4d.png",
-                             counter++);
+        sprintf(filename, "./images/image_%.4d.png", counter++);
 
         cv::imshow("images", frame.img);
         try {
