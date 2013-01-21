@@ -250,20 +250,20 @@ int main( int argc, char* argv[] ) {
         cv::Point2f previous_centroid(0,0);
 
         std::vector<cv::Point2f> current_points, previous_points;
-        cv::Point2f *cp;
-        cv::Point2f *pp;
+        cv::Point2f cp;
+        cv::Point2f pp;
 
         for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
-            cp = &current_keypoints[match_it->queryIdx].pt;
-            pp = &previous_keypoints[match_it->trainIdx].pt;
+            cp = current_keypoints[match_it->queryIdx].pt;
+            pp = previous_keypoints[match_it->trainIdx].pt;
 
-            current_centroid.x += cp->x;
-            current_centroid.y += cp->y;
-            current_points.push_back(*cp);
+            current_centroid.x += cp.x;
+            current_centroid.y += cp.y;
+            current_points.push_back(cp);
 
-            previous_centroid.x += pp->x;
-            previous_centroid.y += pp->y;
-            previous_points.push_back(*pp);
+            previous_centroid.x += pp.x;
+            previous_centroid.y += pp.y;
+            previous_points.push_back(pp);
         }
 
         // Normalize the centroids
@@ -276,15 +276,16 @@ int main( int argc, char* argv[] ) {
         double current_scaling = 0;
         double previous_scaling = 0;
 
+        cv::Point2f *cp_ptr, *pp_ptr;
         for ( int i = 0; i < matches.size(); i++ ) {
-            cp = &current_points[i];
-            pp = &previous_points[i];
+            cp_ptr = &current_points[i];
+            pp_ptr = &previous_points[i];
 
-            *cp -= current_centroid;
-            *pp -= previous_centroid;
+            *cp_ptr -= current_centroid;
+            *pp_ptr -= previous_centroid;
 
-            current_scaling += sqrt( cp->dot( *cp ) );
-            previous_scaling += sqrt( pp->dot( *pp ) );
+            current_scaling += sqrt( cp_ptr->dot( *cp_ptr ) );
+            previous_scaling += sqrt( pp_ptr->dot( *pp_ptr ) );
         }
 
         // Enforce mean distance sqrt( 2 ) from origin
@@ -306,7 +307,7 @@ int main( int argc, char* argv[] ) {
             );
 
 
-        KeyPointVector current_keypoints_good, previous_keypoints_good;
+        std::vector<cv::Point2f> current_points_good, previous_points_good;
         std::vector<cv::DMatch> good_matches;
 
         // Find the fundamental matrix.
@@ -323,17 +324,19 @@ int main( int argc, char* argv[] ) {
         for ( int i = 0; i < matchesSize; i++ ) {
             if(status[i])
             {
-                current_keypoints_good.push_back( current_keypoints[matches[i].queryIdx] );
-                previous_keypoints_good.push_back( previous_keypoints[matches[i].trainIdx] );
+                current_points_good.push_back( current_keypoints[matches[i].queryIdx].pt );
+                previous_points_good.push_back( previous_keypoints[matches[i].trainIdx].pt );
 
+                // Needed for displaying inliers
                 good_matches.push_back( matches[i] );
             }
         }
+        std::cout << "Matches before pruning: " << matchesSize << "\n" << "Matches after: " << good_matches.size() << std::endl;
 
         // Draw only "good" matches
         cv::Mat img_matches;
         cv::drawMatches(
-            current_frame.img, current_keypoints_good, previous_frame.img, previous_keypoints_good,
+            current_frame.img, current_keypoints, previous_frame.img, previous_keypoints,
             good_matches, img_matches, cv::Scalar::all( -1 ), cv::Scalar::all( -1 ),
             std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS
             );
@@ -341,8 +344,6 @@ int main( int argc, char* argv[] ) {
         // Show detected matches
         imshow( "Good Matches", img_matches );
         imwrite("some.png", img_matches);
-
-        std::cout << "Matches before pruning: " << matchesSize << "\n" << "Matches after: " << current_keypoints_good.size() << std::endl;
 
         // Compute essential matrix
         std::cout << F <<  std::endl;
@@ -385,11 +386,11 @@ int main( int argc, char* argv[] ) {
             int num_inliers = 0;
 
             for ( int m = 0; m < (int) good_matches.size(); m++ ) {
-                cv::Point3f previous_point_homogeneous ( previous_keypoints_good[m].pt.x,
-                                                         previous_keypoints_good[m].pt.y,
+                cv::Point3f previous_point_homogeneous ( previous_points_good[m].x,
+                                                         previous_points_good[m].y,
                                                          1 );
-                cv::Point3f current_point_homogeneous ( current_keypoints_good[m].pt.x,
-                                                        current_keypoints_good[m].pt.y,
+                cv::Point3f current_point_homogeneous ( current_points_good[m].x,
+                                                        current_points_good[m].y,
                                                         1 );
 
                 cv::Matx31d X_a = IterativeLinearLSTriangulation(previous_point_homogeneous,	//homogenous image point (u,v,1)
