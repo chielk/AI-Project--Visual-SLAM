@@ -25,8 +25,136 @@
 #include "inputsource.hpp"
 
 #define RED cv::Scalar( 0, 0, 255 )
+#define EPSILON 0.0001
 
 typedef std::vector<cv::KeyPoint> KeyPointVector;
+
+
+
+
+bool DecomposeEtoRandT(
+cv::Matx33d &E,
+cv::Mat &R1,
+cv::Mat &R2,
+cv::Mat &t)
+{
+    //Using HZ E decomposition
+    cv::SVD svd(E, cv::SVD::MODIFY_A);
+
+    //check if first and second singular values are the same (as they should be)
+    double singular_values_ratio = fabsf(svd.w.at<double>(0) / svd.w.at<double>(1));
+    std::cout << svd.w << std::endl;
+    if(singular_values_ratio>1.0)
+    {
+        singular_values_ratio = 1.0/singular_values_ratio; // flip ratio to keep it [0,1]
+    }
+    if (singular_values_ratio < 0.4) {
+        std::cout << "singular values are too far apart\n" << std::endl;
+        return false;
+    }
+
+    cv::Matx33d W(  0, -1,  0,	//HZ 9.13
+                    1,  0,  0,
+                    0,  0,  1);
+    cv::Matx33d Wt( 0,  1,  0,
+                   -1,  0,  0,
+                    0,  0,  1);
+
+    R1 = svd.u * cv::Mat(W) * svd.vt; //HZ 9.19
+    R2 = svd.u * cv::Mat(Wt) * svd.vt; //HZ 9.19
+    t = svd.u.col(2); //u3
+
+    return true;
+}
+
+/**
+From "Triangulation", Hartley, R.I. and Sturm, P., Computer vision and image understanding, 1997
+*/
+cv::Mat_<double> LinearLSTriangulation( cv::Point3d u,	//homogenous image point (u,v,1)
+                                        cv::Matx34d P,	//camera 1 matrix
+                                        cv::Point3d u1,	//homogenous image point in 2nd camera
+                                        cv::Matx34d P1	//camera 2 matrix
+                                  )
+    {
+
+    //build matrix A for homogenous equation system Ax = 0
+    //assume X = (x,y,z,1), for Linear-LS method
+    //which turns it into a AX = B system, where A is 4x3, X is 3x1 and B is 4x1
+    // cout << "u " << u <<", u1 " << u1 << endl;
+    // Matx<double,6,4> A; //this is for the AX=0 case, and with linear dependence..
+    // A(0) = u.x*P(2)-P(0);
+    // A(1) = u.y*P(2)-P(1);
+    // A(2) = u.x*P(1)-u.y*P(0);
+    // A(3) = u1.x*P1(2)-P1(0);
+    // A(4) = u1.y*P1(2)-P1(1);
+    // A(5) = u1.x*P(1)-u1.y*P1(0);
+    // Matx43d A; //not working for some reason...
+    // A(0) = u.x*P(2)-P(0);
+    // A(1) = u.y*P(2)-P(1);
+    // A(2) = u1.x*P1(2)-P1(0);
+    // A(3) = u1.y*P1(2)-P1(1);
+    cv::Matx43d A(  u.x*P(2,0)-P(0,0),	  u.x*P(2,1)-P(0,1),	u.x*P(2,2)-P(0,2),
+                    u.y*P(2,0)-P(1,0),	  u.y*P(2,1)-P(1,1),	u.y*P(2,2)-P(1,2),
+                    u1.x*P1(2,0)-P1(0,0), u1.x*P1(2,1)-P1(0,1),	u1.x*P1(2,2)-P1(0,2),
+                    u1.y*P1(2,0)-P1(1,0), u1.y*P1(2,1)-P1(1,1),	u1.y*P1(2,2)-P1(1,2)
+                  );
+    cv::Matx41d B( -(u.x*P(2,3)     -P(0,3)),
+                   -(u.y*P(2,3)     -P(1,3)),
+                   -(u1.x*P1(2,3)	-P1(0,3)),
+                   -(u1.y*P1(2,3)	-P1(1,3))
+                 );
+
+    cv::Mat_<double> X;
+    cv::solve(A,B,X,cv::DECOMP_SVD);
+
+    return X;
+}
+
+
+/**
+From "Triangulation", Hartley, R.I. and Sturm, P., Computer vision and image understanding, 1997
+*/
+cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u,	//homogenous image point (u,v,1)
+                                            cv::Matx34d P,	//camera 1 matrix
+                                            cv::Point3d u1,	//homogenous image point in 2nd camera
+                                            cv::Matx34d P1	//camera 2 matrix
+                                            ) {
+    double wi = 1, wi1 = 1;
+    cv::Mat_<double> X(4,1);
+    for (int i=0; i<10; i++) {
+        //Hartley suggests 10 iterations at most
+        cv::Mat_<double> X_ = LinearLSTriangulation(u,P,u1,P1);
+        X(0) = X_(0); X(1) = X_(1); X(2) = X_(2); X(3) = 1.0;
+
+        //recalculate weights
+        double p2x = cv::Mat_<double>(cv::Mat_<double>(P).row(2)*X)(0);
+        double p2x1 = cv::Mat_<double>(cv::Mat_<double>(P1).row(2)*X)(0);
+
+        //breaking point
+        if(fabsf(wi - p2x) <= EPSILON && fabsf(wi1 - p2x1) <= EPSILON) break;
+
+        wi = p2x;
+        wi1 = p2x1;
+
+        //reweight equations and solve
+        cv::Matx43d A( (u.x*P(2,0)-P(0,0))/wi,	    (u.x*P(2,1)-P(0,1))/wi,	    (u.x*P(2,2)-P(0,2))/wi,
+                   (u.y*P(2,0)-P(1,0))/wi,	    (u.y*P(2,1)-P(1,1))/wi,	    (u.y*P(2,2)-P(1,2))/wi,
+                   (u1.x*P1(2,0)-P1(0,0))/wi1,	(u1.x*P1(2,1)-P1(0,1))/wi1,	(u1.x*P1(2,2)-P1(0,2))/wi1,
+                   (u1.y*P1(2,0)-P1(1,0))/wi1,	(u1.y*P1(2,1)-P1(1,1))/wi1,	(u1.y*P1(2,2)-P1(1,2))/wi1
+                 );
+        cv::Mat_<double> B = (cv::Mat_<double>(4,1) <<	-(u.x*P(2,3)	-P(0,3))/wi,
+                                                -(u.y*P(2,3)	-P(1,3))/wi,
+                                                -(u1.x*P1(2,3)	-P1(0,3))/wi1,
+                                                -(u1.y*P1(2,3)	-P1(1,3))/wi1
+                          );
+
+        cv::solve(A,B,X_,cv::DECOMP_SVD);
+        X(0) = X_(0); X(1) = X_(1); X(2) = X_(2); X(3) = 1.0;
+    }
+    return cv::Matx31d(X(0), X(1), X(2));
+}
+
+
 
 int main( int argc, char* argv[] ) {
     if ( argc < 3 ) {
@@ -116,45 +244,27 @@ int main( int argc, char* argv[] ) {
 
         matcher.match( current_descriptors, previous_descriptors, matches );
 
-        double max_dist = 0;
-        double min_dist = 100;
-        double dist;
+        // Quick calculation of centroid
         std::vector<cv::DMatch>::iterator match_it;
+        cv::Point2f current_centroid(0,0);
+        cv::Point2f previous_centroid(0,0);
 
-        // Quick calculation of max and min distances between keypoints
+        std::vector<cv::Point2f> current_points, previous_points;
+        cv::Point2f *cp;
+        cv::Point2f *pp;
+
         for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
-            dist = match_it->distance;
-            if ( dist < min_dist ) min_dist = dist;
-            else if ( dist > max_dist ) max_dist = dist;
+            cp = &current_keypoints[match_it->queryIdx].pt;
+            pp = &previous_keypoints[match_it->trainIdx].pt;
+
+            current_centroid.x += cp->x;
+            current_centroid.y += cp->y;
+            current_points.push_back(*cp);
+
+            previous_centroid.x += pp->x;
+            previous_centroid.y += pp->y;
+            previous_points.push_back(*pp);
         }
-
-        // Find the good matches and calculate centroids
-        std::vector<cv::DMatch> good_matches;
-        cv::Point2f current_centroid( 0, 0 );
-        cv::Point2f previous_centroid( 0, 0 );
-
-        double double_min_dist = 2*(min_dist + 20);
-        for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
-            if ( match_it->distance <= double_min_dist ) {
-                current_centroid  += current_keypoints[match_it->queryIdx].pt;
-                previous_centroid += previous_keypoints[match_it->trainIdx].pt;
-
-                good_matches.push_back( *match_it );
-            }
-        }
-
-        // Draw only "good" matches
-        cv::Mat img_matches;
-        cv::drawMatches(
-            current_frame.img, current_keypoints, previous_frame.img, previous_keypoints,
-            good_matches, img_matches, cv::Scalar::all( -1 ), cv::Scalar::all( -1 ),
-            std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS
-            );
-
-        // Show detected matches
-        imshow( "Good Matches", img_matches );
-        imwrite("some.png", img_matches);
-
 
         // Normalize the centroids
         int matchesSize = matches.size();
@@ -166,11 +276,9 @@ int main( int argc, char* argv[] ) {
         double current_scaling = 0;
         double previous_scaling = 0;
 
-        cv::Point2f *cp;
-        cv::Point2f *pp;
-        for ( match_it = good_matches.begin(); match_it < good_matches.end(); match_it++ ) {
-            cp = &current_keypoints[match_it->queryIdx].pt;
-            pp = &previous_keypoints[match_it->trainIdx].pt;
+        for ( int i = 0; i < matches.size(); i++ ) {
+            cp = &current_points[i];
+            pp = &previous_points[i];
 
             *cp -= current_centroid;
             *pp -= previous_centroid;
@@ -180,16 +288,8 @@ int main( int argc, char* argv[] ) {
         }
 
         // Enforce mean distance sqrt( 2 ) from origin
-        current_scaling  = sqrt( 2.0 ) * (double) good_matches.size() / current_scaling;
-        previous_scaling = sqrt( 2.0 ) * (double) good_matches.size() / previous_scaling;
-
-        // Scale features and store the points
-        std::vector<cv::Point2f> current_points, previous_points;
-
-        for ( match_it = good_matches.begin(); match_it != good_matches.end(); match_it++ ) {
-            current_points.push_back( current_keypoints[match_it->queryIdx].pt * current_scaling );
-            previous_points.push_back( previous_keypoints[match_it->trainIdx].pt * previous_scaling );
-        }
+        current_scaling  = sqrt( 2.0 ) * (double) matches.size() / current_scaling;
+        previous_scaling = sqrt( 2.0 ) * (double) matches.size() / previous_scaling;
 
         // Compute transformation matrices
         cv::Mat current_T, previous_T;
@@ -205,125 +305,139 @@ int main( int argc, char* argv[] ) {
             0,                0,                1
             );
 
-        // Compute fundamental matrix
-        cv::Mat F = cv::findFundamentalMat( previous_points, current_points );
+
+        KeyPointVector current_keypoints_good, previous_keypoints_good;
+        std::vector<cv::DMatch> good_matches;
+
+        // Find the fundamental matrix.
+        double minVal,maxVal;
+        cv::minMaxIdx(previous_points, &minVal, &maxVal);
+
+        std::vector<uchar> status(matches.size());
+        cv::Mat F = cv::findFundamentalMat( previous_points, current_points, status, cv::FM_RANSAC, 0.006 * maxVal, 0.99);
+
+        // Scale up again
         F = current_T.t() * F * previous_T;
 
-        // Compute essential matrix
-        cv::Mat E, S, T, Ra, Rb;
-        E = K.inv().t() * F * K;
+        // Reject outliers
+        for ( int i = 0; i < matchesSize; i++ ) {
+            if(status[i])
+            {
+                current_keypoints_good.push_back( current_keypoints[matches[i].queryIdx] );
+                previous_keypoints_good.push_back( previous_keypoints[matches[i].trainIdx] );
 
-        // Enforce rank 2-ness
-        cv::Mat U (3,3, CV_32F);
-        cv::Mat W, Vt, t;
-        cv::SVD::compute( E, W, U, Vt );
-
-        cv::Mat w = ( cv::Mat_<double>(3,3) << W.at<double>(0,0), 0.0, 0.0,
-            0.0, W.at<double>(1,0), 0.0,
-            0.0, 0.0, 0.0 );
-        E = U * w * Vt;
-
-        // Compute R and T
-        cv::SVD::compute( E, S, U, Vt );
-        Ra = U * hartley_W * Vt;         // Possible transposed error
-        Rb = U * hartley_W.t() * Vt;
-        t = ( cv::Mat_<double>(3,1) << U.at<double>(0,2),
-                                       U.at<double>(1,2),
-                                       U.at<double>(2,2) );
-
-        std::cout << matrixToString(Ra) << "\n\n" << matrixToString(Rb) << std::endl;
-
-        // Assure determinant is positive
-        if ( cv::determinant( Ra ) < 0 ) Ra = -Ra;
-        if ( cv::determinant( Rb ) < 0 ) Rb = -Rb;
-
-        // At this point there are 4 possible solutions.
-        // Use majority vote to decide winner
-
-        // create vector containing all 4 solutions
-        cv::Mat possible_projection[4];
-        cv::hconcat( Ra,  t , possible_projection[0] ); 
-        cv::hconcat( Ra, -1 * t , possible_projection[1] ); 
-        cv::hconcat( Rb,  t , possible_projection[2] ); 
-        cv::hconcat( Rb, -1 * t , possible_projection[3] );
-
-        int max_inliers = 0;
-        int num_inliers = 0;
-        cv::Mat best_transform;
-
-        cv::Mat X = cv::Mat( 4, good_matches.size(), CV_64F, cv::Scalar( 1 ) );
-
-        for ( int i = 0; i < 4; i++ ) {
-            // Get the number of inliers
-            cv::Mat J = ( cv::Mat_<double>( 4, 4 ) << 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 );
-            cv::Mat U, S, V;
-
-            cv::Mat P1;
-            cv::hconcat( K, (cv::Mat) ( cv::Mat_<double>(3,1) << 0, 0, 0 ), P1 );
-
-            // Begin inner loops
-            for ( int m = 0; m < (int) good_matches.size(); m++ ) {
-                cv::Point pp = previous_keypoints[good_matches[m].trainIdx].pt;
-                cv::Point cp = current_keypoints[good_matches[m].queryIdx].pt;
-
-                for ( int j = 0; j < 4; j++ ) {
-                    J.at<double>(0, j) = P1.at<double>(2, j) * pp.x - P1.at<double>(0, j);
-                    J.at<double>(1, j) = P1.at<double>(2, j) * pp.y - P1.at<double>(1, j);
-                    J.at<double>(2, j) = possible_projection[i].at<double>(2, j) * cp.x - possible_projection[i].at<double>(0, j);
-                    J.at<double>(3, j) = possible_projection[i].at<double>(2, j) * cp.y - possible_projection[i].at<double>(1, j);
-                }
-                cv::SVD::compute(J, S, U, V);
-
-                X.at<double>( 0, m ) = V.at<double>( 0, 2 );
-                X.at<double>( 1, m ) = V.at<double>( 1, 2 );
-                X.at<double>( 2, m ) = V.at<double>( 2, 2 );
-
-                //cv::hconcat( V(cv::Range(0,3), cv::Range(3,3)), X );
-            }
-
-            cv::Mat AX1;
-            cv::Mat BX1;
-
-            AX1 = P1 * X;
-            BX1 = possible_projection[i] * X;
-            num_inliers = 0;
-
-            // Calculating inliers
-            for (int j = 0; j < good_matches.size(); j++ ) {
-                if ( AX1.at<double>(2, j) * X.at<double>(3, j)  > 0 && BX1.at<double>(2, j) * X.at<double>(3, j) > 0 ) {
-                    num_inliers++;
-                }
-            }
-
-            if ( num_inliers > max_inliers ) {
-                max_inliers = num_inliers;
-                best_transform = possible_projection[i];
+                good_matches.push_back( matches[i] );
             }
         }
 
-        std::cout << matrixToString( best_transform ) << std::endl;
-        std::cout << matrixToString(X.t()) << std::endl;
+        // Draw only "good" matches
+        cv::Mat img_matches;
+        cv::drawMatches(
+            current_frame.img, current_keypoints_good, previous_frame.img, previous_keypoints_good,
+            good_matches, img_matches, cv::Scalar::all( -1 ), cv::Scalar::all( -1 ),
+            std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS
+            );
+
+        // Show detected matches
+        imshow( "Good Matches", img_matches );
+        imwrite("some.png", img_matches);
+
+        std::cout << "Matches before pruning: " << matchesSize << "\n" << "Matches after: " << current_keypoints_good.size() << std::endl;
+
+        // Compute essential matrix
+        std::cout << F <<  std::endl;
+        F.at<double>(2,2) = 0;
+        std::cout << "Fundamental:\n" << F <<  std::endl;
+
+        cv::Matx33d E (cv::Mat(K.t() * F * K));
+        std::cout << "\nEssential:\n" << E <<  std::endl;
+
+        // Estimation of projection matrix
+        cv::Mat R1, R2, t;
+        if(!DecomposeEtoRandT(E, R1, R2, t)) return -1;
+
+        // Check correctness
+        if( cv::determinant(R1) < 0 ) R1 = -R1;
+        if( cv::determinant(R2) < 0 ) R2 = -R2;
+
+        cv::Mat possible_projections[4];
+        cv::hconcat( R1,  t, possible_projections[0] );
+        cv::hconcat( R1, -t, possible_projections[1] );
+        cv::hconcat( R2,  t, possible_projections[2] );
+        cv::hconcat( R2, -t, possible_projections[3] );
+
+        // Construct matrix [I|0]
+        cv::Matx34d P1(1, 0, 0, 0,
+                       0, 1, 0, 0,
+                       0, 0, 1, 0);
+        cv::Matx34d P2;
+
+        int max_inliers = 0;
+        cv::Mat best_X ( 4, good_matches.size(), CV_64F, cv::Scalar( 1 ) );
+        cv::Mat X ( 4, good_matches.size(), CV_64F, cv::Scalar( 1 ) );
+        cv::Matx34d best_transform;
+
+        // Loop over possible candidates
+        for(int i = 0 ; i < 4; i ++ )
+        {
+            P2 = possible_projections[i];
+
+            int num_inliers = 0;
+
+            for ( int m = 0; m < (int) good_matches.size(); m++ ) {
+                cv::Point3f previous_point_homogeneous ( previous_keypoints_good[m].pt.x,
+                                                         previous_keypoints_good[m].pt.y,
+                                                         1 );
+                cv::Point3f current_point_homogeneous ( current_keypoints_good[m].pt.x,
+                                                        current_keypoints_good[m].pt.y,
+                                                        1 );
+
+                cv::Matx31d X_a = IterativeLinearLSTriangulation(previous_point_homogeneous,	//homogenous image point (u,v,1)
+                                                             P1,                        	//camera 1 matrix
+                                                             current_point_homogeneous, 	//homogenous image point in 2nd camera
+                                                             P2                          	//camera 2 matrix
+                                                             );
+
+
+                X.at<double>(0,m) = X_a(0);
+                X.at<double>(1,m) = X_a(1);
+                X.at<double>(2,m) = X_a(2);
+
+                if(X.at<double>(0,m) > 0)
+                {
+                    num_inliers++;
+                }
+            }
+            if (num_inliers > max_inliers)
+            {
+                best_X = X.clone();
+                max_inliers = num_inliers;
+                best_transform = P2;
+            }
+        }
+        std::cout << matrixToString(best_X.t()) << std::endl;
+        std::cout << best_transform << std::endl;
 
         // SOLVE THEM SCALE ISSUES for m = 1;
         cv::Mat A (2 * good_matches.size(), 1, CV_32F, 0.0f);
         cv::Mat b (2 * good_matches.size(), 1, CV_32F, 0.0f);
         cv::Point p;
 
-        cv::Mat r1(best_transform(cv::Range(0,1), cv::Range(0,3)));
-        cv::Mat r2(best_transform(cv::Range(1,2), cv::Range(0,3)));
-        cv::Mat r3(best_transform(cv::Range(2,3), cv::Range(0,3)));
+        cv::Matx<double,1,4> r1 = P2.row(0);
+        cv::Matx<double,1,4> r2 = P2.row(1);
+        cv::Matx<double,1,4> r3 = P2.row(2);
         cv::Mat temp1;
         cv::Mat temp2;
         cv::Mat point3D;
 
-        double s_t_u = best_transform.at<double>(0,3);
-        double s_t_v = best_transform.at<double>(1,3);
-        double s_t_w = best_transform.at<double>(1,3);
+        double s_t_u = P2(0,3);
+        double s_t_v = P2(1,3);
+        double s_t_w = P2(1,3);
 
         int i = 0;
         for ( match_it = good_matches.begin(); match_it != good_matches.end(); match_it++ ) {
             p = current_keypoints[match_it->queryIdx].pt;
-            point3D = X(cv::Range(0,3), cv::Range(i/2, i/2+1));
+            point3D = X.col(i / 2);
 
             cv::subtract(r1, r3 * p.x, temp1);
             cv::subtract(r2, r3 * p.y, temp2);
@@ -338,11 +452,7 @@ int main( int argc, char* argv[] ) {
 
             // Together, these comprise method 3
             i = i + 2;
-        }
-
-        std::cout<< A.size().height << " " << A.size().width << std::endl;
-        std::cout<< b.size().height << " " << b.size().width << std::endl;
-
+        }      
         A = (A.t() * A).inv() * A.t();
 
         std::cout << matrixToString((cv::Mat)(A*b)) << std::endl;
@@ -355,6 +465,6 @@ int main( int argc, char* argv[] ) {
         previous_frame = current_frame;
         previous_descriptors = current_descriptors;
     }
-
     return 0;
 }
+
