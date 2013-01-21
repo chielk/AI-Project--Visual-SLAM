@@ -288,6 +288,8 @@ int main( int argc, char* argv[] ) {
             previous_scaling += sqrt( pp_ptr->dot( *pp_ptr ) );
         }
 
+        std::cout << current_centroid << " "  << previous_centroid << std::endl;
+
         // Enforce mean distance sqrt( 2 ) from origin
         current_scaling  = sqrt( 2.0 ) * (double) matches.size() / current_scaling;
         previous_scaling = sqrt( 2.0 ) * (double) matches.size() / previous_scaling;
@@ -306,7 +308,13 @@ int main( int argc, char* argv[] ) {
             0,                0,                1
             );
 
+        for ( int i = 0; i < matches.size(); i++ ) {
+            cp_ptr = &current_points[i];
+            pp_ptr = &previous_points[i];
 
+            *cp_ptr *= current_scaling;
+            *pp_ptr *= previous_scaling;
+        }
         std::vector<cv::Point2f> current_points_good, previous_points_good;
         std::vector<cv::DMatch> good_matches;
 
@@ -333,6 +341,10 @@ int main( int argc, char* argv[] ) {
         }
         std::cout << "Matches before pruning: " << matchesSize << "\n" << "Matches after: " << good_matches.size() << std::endl;
 
+        //for(int i = 0; i < current_points_good.size(); i++) {
+        //    std::cout << (cv::Mat) cv::Matx31d(current_points_good[i].x, current_points_good[i].y, 1).t() * K * (cv::Mat) cv::Matx31d(previous_points_good[i].x, previous_points_good[i].y, 1) << std::endl;
+        //}
+
         // Draw only "good" matches
         cv::Mat img_matches;
         cv::drawMatches(
@@ -347,7 +359,6 @@ int main( int argc, char* argv[] ) {
 
         // Compute essential matrix
         std::cout << F <<  std::endl;
-        F.at<double>(2,2) = 0;
         std::cout << "Fundamental:\n" << F <<  std::endl;
 
         cv::Matx33d E (cv::Mat(K.t() * F * K));
