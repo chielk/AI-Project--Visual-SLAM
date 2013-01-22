@@ -27,7 +27,7 @@
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
 #define THRESHOLD 40
-#define VERBOSE false
+#define VERBOSE 0
 
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 
@@ -368,13 +368,13 @@ int main( int argc, char* argv[] ) {
 
         // Estimation of projection matrix
         cv::Mat R1, R2, t;
-        if( !DecomposeEtoRandT( E, R1, R2, t ) ) {
+        if ( !DecomposeEtoRandT( E, R1, R2, t ) ) {
             return -1;
         }
 
         // Check correctness
-        if( cv::determinant(R1) < 0 ) R1 = -R1;
-        if( cv::determinant(R2) < 0 ) R2 = -R2;
+        if ( cv::determinant(R1) < 0 ) R1 = -R1;
+        if ( cv::determinant(R2) < 0 ) R2 = -R2;
 
         cv::Mat possible_projections[4];
         cv::hconcat( R1,  t, possible_projections[0] );
@@ -436,10 +436,15 @@ int main( int argc, char* argv[] ) {
         //std::cout << "Scale : " << scale << std::endl;
 
         // TODO BE SMART
-        cv::Matx44d transformationMatrix( best_transform(0,0),best_transform(0,1),best_transform(0,2),best_transform(0,3),
-                                          best_transform(1,0),best_transform(1,1),best_transform(1,2),best_transform(1,3),
-                                          best_transform(2,0),best_transform(2,1),best_transform(2,2),best_transform(2,3),
-                                          0, 0, 0, 1 );
+        
+        //cv::Matx44d transformationMatrix( best_transform(0,0),best_transform(0,1),best_transform(0,2),best_transform(0,3),
+        //                                  best_transform(1,0),best_transform(1,1),best_transform(1,2),best_transform(1,3),
+        //                                  best_transform(2,0),best_transform(2,1),best_transform(2,2),best_transform(2,3),
+        //                                  0, 0, 0, 1 );
+        
+        cv::Matx44d transformationMatrix;
+        cv::vconcat( best_transform, cv::Matx31d( 0, 0, 0, 1 ), transformationMatrix );
+
         robotPosition = transformationMatrix * robotPosition;
         robotPosition(0,0) /= robotPosition(3,0);
         robotPosition(1,0) /= robotPosition(3,0);
