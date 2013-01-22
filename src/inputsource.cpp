@@ -1,30 +1,32 @@
 #include "inputsource.hpp"
 
-bool loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
+bool loadSettings(cv::Matx33d &cameraMatrix, cv::Mat &distortionCoeffs)
 {
     const std::string config("config");
     cv::FileStorage fs (config, cv::FileStorage::READ);
 
-    fs["cameraMatrix"] >> cameraMatrix;
+    cv::Mat temp;
+    fs["cameraMatrix"] >> temp;
     fs["distortionCoeffs"] >> distortionCoeffs;
 
-    if(cameraMatrix.empty())
+    if( temp.empty())
     {
         std::cerr << "No config file present" << std::endl;
         return false;
     }
 
+    cameraMatrix = temp;
     fs.release();
     return true;
 }
 
-void saveSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
+void saveSettings(cv::Matx33d &cameraMatrix, cv::Mat &distortionCoeffs)
 {
     const std::string config("config");
     cv::FileStorage fs (config, cv::FileStorage::WRITE);
 
-    fs << "cameraMatrix" << cameraMatrix;
-    fs << "distortionCoeffs" << distortionCoeffs;
+    fs << "cameraMatrix" << cv::Mat(cameraMatrix);
+    fs << "distortionCoeffs" << cv::Mat(distortionCoeffs);
 
     fs.release();
 }
@@ -32,9 +34,9 @@ void saveSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
 /**
   *
   */
-void undistortImage(cv::Mat &image, cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs)
+void undistortImage(cv::Mat &image, cv::Matx33d &cameraMatrix, cv::Mat &distortionCoeffs)
 {
-    if(!cameraMatrix.empty() && !distortionCoeffs.empty())
+    if(!cv::Mat(cameraMatrix).empty() && !distortionCoeffs.empty())
     {
         cv::Mat temp = image.clone();
         cv::undistort(temp, image, cameraMatrix, distortionCoeffs);
@@ -94,15 +96,15 @@ bool FileInput::getFrame(Frame &frame)
 
 NaoInput::NaoInput(const std::string &robotIp)
 {
-    cv::Mat temp1;
-    cv::Mat temp2;
-    init(robotIp, "NaoInput", AL::kTopCamera, temp1, temp2);
+    cv::Matx33d camMat;
+    cv::Mat distCoeff;
+    init(robotIp, "NaoInput", AL::kTopCamera, camMat, distCoeff);
 }
 
 NaoInput::NaoInput(const std::string &robotIp,
                    std::string name,
                    int cameraId,
-                   cv::Mat &cameraMatrix,
+                   cv::Matx33d &cameraMatrix,
                    cv::Mat &distortionCoeffs)
 {
     init(robotIp, name, cameraId, cameraMatrix, distortionCoeffs);
@@ -111,7 +113,7 @@ NaoInput::NaoInput(const std::string &robotIp,
 void NaoInput::init(const std::string &robotIp,
                     std::string name,
                     int cameraId,
-                    cv::Mat &cameraMatrix,
+                    cv::Matx33d &cameraMatrix,
                     cv::Mat &distortionCoeffs)
 {
     this->camProxy = new AL::ALVideoDeviceProxy(robotIp);

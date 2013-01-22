@@ -33,7 +33,7 @@ public:
 class NaoInput : public InputSource
 {
     std::string clientName;
-    cv::Mat cameraMatrix;
+    cv::Matx33d cameraMatrix;
     cv::Mat distortionCoeffs;
     std::vector<float> initialCameraPosition;
 
@@ -44,7 +44,7 @@ class NaoInput : public InputSource
     void init(const std::string &robotIp,
               std::string name,
               int cameraId,
-              cv::Mat &cameraMatrix,
+              cv::Matx33d &cameraMatrix,
               cv::Mat &distortionCoeffs);
 
 public:
@@ -52,7 +52,7 @@ public:
     NaoInput(const std::string &robotIp,
              std::string name,
              int cameraId,
-             cv::Mat &cameraMatrix,
+             cv::Matx33d &cameraMatrix,
              cv::Mat &distortionCoeffs);
     ~NaoInput();
     bool getFrame(Frame &frame);
@@ -72,7 +72,7 @@ public:
     bool getFrame(Frame &frame);
 };
 
-void undistortImage(cv::Mat &image, cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs);
+void undistortImage(cv::Mat &image, cv::Matx33d &cameraMatrix, cv::Mat &distortionCoeffs);
 
 typedef struct
 {
@@ -83,8 +83,8 @@ typedef struct
     int colorspace;
 } config;
 
-void saveSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs);
-bool loadSettings(cv::Mat &cameraMatrix, cv::Mat &distortionCoeffs);
+void saveSettings(cv::Matx33d &cameraMatrix, cv::Mat &distortionCoeffs);
+bool loadSettings(cv::Matx33d &cameraMatrix, cv::Mat &distortionCoeffs);
 
 std::string matrixToString(cv::Mat);
 

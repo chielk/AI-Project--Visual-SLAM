@@ -51,7 +51,7 @@ class NaoController {
 
 public:
     NaoController(std::string robotIp);
-    NaoController(std::string robotIp, cv::Mat &cameraMatrix, cv::Mat &distCoeffs);
+    NaoController(std::string robotIp, cv::Matx33d &cameraMatrix, cv::Mat &distCoeffs);
 
     void stand();
     void cameraCalibration();
@@ -94,7 +94,7 @@ NaoController::NaoController(const std::string robotIp)
     this->motProxy = naoInput->motProxy;
 }
 
-NaoController::NaoController(std::string robotIp, cv::Mat &cameraMatrix, cv::Mat &distCoeffs)
+NaoController::NaoController(std::string robotIp, cv::Matx33d &cameraMatrix, cv::Mat &distCoeffs)
 {
     this->naoInput = new NaoInput(robotIp, "", AL::kTopCamera, cameraMatrix, distCoeffs);
     // this->naoInput = new NaoInput(robotIp, cameraMatrix, ...
@@ -122,9 +122,10 @@ void NaoController::cameraCalibration()
             objectPoints[0].push_back(cv::Point3f(float( j*squareSize ), float( i*squareSize ), 0));
 
     // camera matrix for intrinsic and extrinsic parameters
-    cv::Mat cameraMatrix, distCoeffs;
-    cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
-    cameraMatrix.at<double>(0,0) = 1.0;
+    cv::Matx33d cameraMatrix;
+    cv::Mat distCoeffs;
+    cameraMatrix = cv::Matx33d(0,0,0, 0,0,0 , 0,0,0);
+    cameraMatrix(0,0) = 1.0;
     distCoeffs = cv::Mat::zeros(8, 1, CV_64F);
 
     Frame frame;
@@ -175,7 +176,7 @@ void NaoController::cameraCalibration()
                         rms = cv::calibrateCamera(objectPoints,
                                                   finalImagePoints,
                                                   imageSize,
-                                                  cameraMatrix,
+                                                  cv::Mat(cameraMatrix),
                                                   distCoeffs,
                                                   rvecs,
                                                   tvecs,
@@ -185,7 +186,7 @@ void NaoController::cameraCalibration()
                         rms = cv::calibrateCamera(objectPoints,
                                                   finalImagePoints,
                                                   imageSize,
-                                                  cameraMatrix,
+                                                  cv::Mat(cameraMatrix),
                                                   distCoeffs,
                                                   rvecs,
                                                   tvecs,
@@ -202,7 +203,7 @@ void NaoController::cameraCalibration()
                                                                finalImagePoints,
                                                                rvecs,
                                                                tvecs,
-                                                               cameraMatrix,
+                                                               cv::Mat(cameraMatrix),
                                                                distCoeffs,
                                                                reprojErrs);
                 std::cout << "Avg re projection error = "  << totalAvgErr << std::endl;
@@ -391,7 +392,8 @@ int main(int argc, char* argv[])
 
     const std::string robotIp(argv[1]);
     NaoController *naoCam;
-    cv::Mat cameraMatrix, distCoeffs;
+    cv::Matx33d cameraMatrix;
+    cv::Mat distCoeffs;
 
     if(loadSettings(cameraMatrix, distCoeffs)) {
         naoCam = new NaoController(robotIp, cameraMatrix, distCoeffs);
