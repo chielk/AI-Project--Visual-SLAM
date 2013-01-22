@@ -26,7 +26,7 @@
 
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
-#define THRESHOLD 100
+#define THRESHOLD 40
 
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 
@@ -59,7 +59,6 @@ bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
 
     return true;
 }
-
 
 //From "Triangulation", Hartley, R.I. and Sturm, P., Computer vision and image understanding, 1997
 //
@@ -234,6 +233,8 @@ int main( int argc, char* argv[] ) {
 
         matcher.match( current_descriptors, previous_descriptors, matches );
 
+        // TODO what if keypoints overlap too much with old keypoints
+
         // Quick calculation of centroid
         std::vector<cv::DMatch>::iterator match_it;
         cv::Point2f current_centroid(0,0);
@@ -244,6 +245,7 @@ int main( int argc, char* argv[] ) {
         cv::Point2f pp;
 
         for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
+
             cp = current_keypoints[match_it->queryIdx].pt;
             pp = previous_keypoints[match_it->trainIdx].pt;
 
@@ -308,6 +310,9 @@ int main( int argc, char* argv[] ) {
         // Scale up again
         F = current_T.t() * F * previous_T;
 
+        // calc distance between matches
+        double mean_distance = 0.0;
+
         // Reject outliers
         for ( int i = 0; i < matchesSize; i++ ) {
             if( status[i] ) {
@@ -316,9 +321,30 @@ int main( int argc, char* argv[] ) {
 
                 // Needed for displaying inliers
                 good_matches.push_back( matches[i] );
+
+                mean_distance += matches[i].distance;
+
             }
         }
-        std::cout << "Matches before pruning: " << matchesSize << "\n" << "Matches after: " << good_matches.size() << std::endl;
+        // Distance
+        mean_distance /= (double)good_matches.size();
+
+        std::cout << "Matches before pruning: " << matchesSize << "\n" <<
+                     "Matches after: " << good_matches.size() << "\n" <<
+                     "Mean displacement: " << mean_distance << std::endl;
+
+        if (mean_distance < THRESHOLD)
+        {
+            if (mean_distance < 1)
+            {
+                // whtat
+                int x = 1;
+            }
+
+            std::cout << "Displacement not sufficiently large, skipping frame." << std::endl;
+            continue;
+
+        }
 
 
         //// Check : These values should be 0 (or close to it)
@@ -339,10 +365,10 @@ int main( int argc, char* argv[] ) {
         imwrite("some.png", img_matches);
 
         // Compute essential matrix
-        std::cout << "Fundamental:\n" << F <<  std::endl;
+        //std::cout << "Fundamental:\n" << F <<  std::endl;
 
         cv::Matx33d E (cv::Mat(K.t() * F * K));
-        std::cout << "\nEssential:\n" << E <<  std::endl;
+        //std::cout << "\nEssential:\n" << E <<  std::endl;
 
         // Estimation of projection matrix
         cv::Mat R1, R2, t;
@@ -406,7 +432,7 @@ int main( int argc, char* argv[] ) {
         }
 
         //std::cout << matrixToString(best_X.t()) << std::endl;
-        std::cout << best_transform << std::endl;
+        std::cout << best_transform << "\n" << std::endl;
 
         // SOLVE THEM SCALE ISSUES for m = 1;
         //double scale = solveScale(best_X, best_transform);
