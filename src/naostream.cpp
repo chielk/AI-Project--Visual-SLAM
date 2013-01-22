@@ -32,33 +32,27 @@ typedef std::vector<cv::KeyPoint> KeyPointVector;
 
 
 
-bool DecomposeEtoRandT(
-cv::Matx33d &E,
-cv::Mat &R1,
-cv::Mat &R2,
-cv::Mat &t)
-{
+bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
     //Using HZ E decomposition
     cv::SVD svd(E, cv::SVD::MODIFY_A);
 
     //check if first and second singular values are the same (as they should be)
-    double singular_values_ratio = fabsf(svd.w.at<double>(0) / svd.w.at<double>(1));
+    double singular_values_ratio = fabsf( svd.w.at<double>( 0 ) / svd.w.at<double>( 1 ) );
     std::cout << svd.w << std::endl;
-    if(singular_values_ratio>1.0)
-    {
+    if ( singular_values_ratio > 1.0 ) {
         singular_values_ratio = 1.0/singular_values_ratio; // flip ratio to keep it [0,1]
     }
-    if (singular_values_ratio < 0.4) {
+    if ( singular_values_ratio < 0.4 ) {
         std::cout << "singular values are too far apart\n" << std::endl;
         return false;
     }
 
     cv::Matx33d W(  0, -1,  0,	//HZ 9.13
                     1,  0,  0,
-                    0,  0,  1);
+                    0,  0,  1 );
     cv::Matx33d Wt( 0,  1,  0,
                    -1,  0,  0,
-                    0,  0,  1);
+                    0,  0,  1 );
 
     R1 = svd.u * cv::Mat(W) * svd.vt; //HZ 9.19
     R2 = svd.u * cv::Mat(Wt) * svd.vt; //HZ 9.19
@@ -67,16 +61,13 @@ cv::Mat &t)
     return true;
 }
 
-/**
-From "Triangulation", Hartley, R.I. and Sturm, P., Computer vision and image understanding, 1997
-*/
-cv::Mat_<double> LinearLSTriangulation( cv::Point3d u,	//homogenous image point (u,v,1)
-                                        cv::Matx34d P,	//camera 1 matrix
-                                        cv::Point3d u1,	//homogenous image point in 2nd camera
-                                        cv::Matx34d P1	//camera 2 matrix
-                                  )
-    {
 
+//From "Triangulation", Hartley, R.I. and Sturm, P., Computer vision and image understanding, 1997
+//
+// Arguments:
+//     u1 and u2: homogenous image point (u,v,1)
+//     P1 and P2: Camera matrices
+cv::Mat_<double> LinearLSTriangulation( cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2 ) {
     //build matrix A for homogenous equation system Ax = 0
     //assume X = (x,y,z,1), for Linear-LS method
     //which turns it into a AX = B system, where A is 4x3, X is 3x1 and B is 4x1
@@ -93,15 +84,15 @@ cv::Mat_<double> LinearLSTriangulation( cv::Point3d u,	//homogenous image point 
     // A(1) = u.y*P(2)-P(1);
     // A(2) = u1.x*P1(2)-P1(0);
     // A(3) = u1.y*P1(2)-P1(1);
-    cv::Matx43d A(  u.x*P(2,0)-P(0,0),	  u.x*P(2,1)-P(0,1),	u.x*P(2,2)-P(0,2),
-                    u.y*P(2,0)-P(1,0),	  u.y*P(2,1)-P(1,1),	u.y*P(2,2)-P(1,2),
-                    u1.x*P1(2,0)-P1(0,0), u1.x*P1(2,1)-P1(0,1),	u1.x*P1(2,2)-P1(0,2),
-                    u1.y*P1(2,0)-P1(1,0), u1.y*P1(2,1)-P1(1,1),	u1.y*P1(2,2)-P1(1,2)
-                  );
-    cv::Matx41d B( -(u.x*P(2,3)     -P(0,3)),
-                   -(u.y*P(2,3)     -P(1,3)),
-                   -(u1.x*P1(2,3)	-P1(0,3)),
-                   -(u1.y*P1(2,3)	-P1(1,3))
+    cv::Matx43d A(  u1.x * P1(2,0) - P1(0,0), u1.x * P1(2,1) - P1(0,1), u1.x * P1(2,2) - P1(0,2),
+                    u1.y * P1(2,0) - P1(1,0), u1.y * P1(2,1) - P1(1,1), u1.y * P1(2,2) - P1(1,2),
+                    u2.x * P2(2,0) - P2(0,0), u2.x * P2(2,1) - P2(0,1), u2.x * P2(2,2) - P2(0,2),
+                    u2.y * P2(2,0) - P2(1,0), u2.y * P2(2,1) - P2(1,1), u2.y * P2(2,2) - P2(1,2)
+                 );
+    cv::Matx41d B( -( u1.x * P1(2,3) - P1(0,3) ),
+                   -( u1.y * P1(2,3) - P1(1,3) ),
+                   -( u2.x * P2(2,3) - P2(0,3) ),
+                   -( u2.y * P2(2,3) - P2(1,3) )
                  );
 
     cv::Mat_<double> X;
@@ -114,44 +105,44 @@ cv::Mat_<double> LinearLSTriangulation( cv::Point3d u,	//homogenous image point 
 /**
 From "Triangulation", Hartley, R.I. and Sturm, P., Computer vision and image understanding, 1997
 */
-cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u,	//homogenous image point (u,v,1)
-                                            cv::Matx34d P,	//camera 1 matrix
-                                            cv::Point3d u1,	//homogenous image point in 2nd camera
-                                            cv::Matx34d P1	//camera 2 matrix
-                                            ) {
-    double wi = 1, wi1 = 1;
-    cv::Mat_<double> X(4,1);
-    for (int i=0; i<10; i++) {
-        //Hartley suggests 10 iterations at most
-        cv::Mat_<double> X_ = LinearLSTriangulation(u,P,u1,P1);
-        X(0) = X_(0); X(1) = X_(1); X(2) = X_(2); X(3) = 1.0;
+cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2	) {
+    double wi1 = 1;
+    double wi2 = 1;
 
-        //recalculate weights
-        double p2x = cv::Mat_<double>(cv::Mat_<double>(P).row(2)*X)(0);
-        double p2x1 = cv::Mat_<double>(cv::Mat_<double>(P1).row(2)*X)(0);
+    cv::Matx41d X;
 
-        //breaking point
-        if(fabsf(wi - p2x) <= EPSILON && fabsf(wi1 - p2x1) <= EPSILON) break;
+    for ( int i = 0; i < 10; i++ ) {
+        // Hartley suggests 10 iterations at most
+        cv::Mat_<double> X_ = LinearLSTriangulation( u1, P1, u2, P2 );
+        X = cv::Matx41d( X_(0), X_(1), X_(2), 1.0 );
 
-        wi = p2x;
+        // Recalculate weights
+        double p2x1 = cv::Mat_<double>(cv::Mat_<double>(P).row(2)*X)(0);
+        double p2x2 = cv::Mat_<double>(cv::Mat_<double>(P2).row(2)*X)(0);
+
+        // Breaking point
+        if ( fabsf( wi1 - p2x1 ) <= EPSILON && fabsf( wi2 - p2x2 ) <= EPSILON ) break;
+
         wi1 = p2x1;
+        wi2 = p2x2;
 
-        //reweight equations and solve
-        cv::Matx43d A( (u.x*P(2,0)-P(0,0))/wi,	    (u.x*P(2,1)-P(0,1))/wi,	    (u.x*P(2,2)-P(0,2))/wi,
-                   (u.y*P(2,0)-P(1,0))/wi,	    (u.y*P(2,1)-P(1,1))/wi,	    (u.y*P(2,2)-P(1,2))/wi,
-                   (u1.x*P1(2,0)-P1(0,0))/wi1,	(u1.x*P1(2,1)-P1(0,1))/wi1,	(u1.x*P1(2,2)-P1(0,2))/wi1,
-                   (u1.y*P1(2,0)-P1(1,0))/wi1,	(u1.y*P1(2,1)-P1(1,1))/wi1,	(u1.y*P1(2,2)-P1(1,2))/wi1
+        // Reweight equations and solve
+        cv::Matx43d A( ( u1.x * P1(2,0) - P1(0,0) ) / wi1, ( u1.x * P1(2,1) - P1(0,1) ) / wi1, ( u1.x * P1(2,2) - P1(0,2) ) / wi1,
+                       ( u1.y * P1(2,0) - P1(1,0) ) / wi1, ( u1.y * P1(2,1) - P1(1,1) ) / wi1, ( u1.y * P1(2,2) - P1(1,2) ) / wi1,
+                       ( u2.x * P2(2,0) - P2(0,0) ) / wi2, ( u2.x * P2(2,1) - P2(0,1) ) / wi2, ( u2.x * P2(2,2) - P2(0,2) ) / wi2,
+                       ( u2.y * P2(2,0) - P2(1,0) ) / wi2, ( u2.y * P2(2,1) - P2(1,1) ) / wi2, ( u2.y * P2(2,2) - P2(1,2) ) / wi2
                  );
-        cv::Mat_<double> B = (cv::Mat_<double>(4,1) <<	-(u.x*P(2,3)	-P(0,3))/wi,
-                                                -(u.y*P(2,3)	-P(1,3))/wi,
-                                                -(u1.x*P1(2,3)	-P1(0,3))/wi1,
-                                                -(u1.y*P1(2,3)	-P1(1,3))/wi1
-                          );
+        cv::Matx41d B( -( u1.x * P1(2,3) - P1(0,3) ) / wi1,
+                       -( u1.y * P1(2,3) - P1(1,3) ) / wi1,
+                       -( u2.x * P2(2,3) - P2(0,3) ) / wi2,
+                       -( u2.y * P2(2,3) - P2(1,3) ) / wi2
+                     );
 
-        cv::solve(A,B,X_,cv::DECOMP_SVD);
-        X(0) = X_(0); X(1) = X_(1); X(2) = X_(2); X(3) = 1.0;
+        cv::solve( A, B, X_, cv::DECOMP_SVD );
+        X = cv::Matx41d( X_(0), X_(1), X_(2), 1.0 );
     }
-    return cv::Matx31d(X(0), X(1), X(2));
+
+    return cv::Matx31d( X(0), X(1), X(2) );
 }
 
 
@@ -164,13 +155,10 @@ int main( int argc, char* argv[] ) {
 
     InputSource *inputSource;
 
-    if (std::string(argv[1]) == "-n")
-    {
+    if ( std::string(argv[1]) == "-n" ) {
         const std::string robotIp( argv[2] );
         inputSource = new NaoInput( robotIp );
-    }
-    else if(std::string(argv[1]) == "-f" )
-    {
+    } else if ( std::string(argv[1]) == "-f" ) {
         const std::string folderName(argv[2]);
         inputSource = new FileInput( folderName );
     } else {
@@ -197,32 +185,36 @@ int main( int argc, char* argv[] ) {
     // Load calibrationmatrix K (and distortioncoefficients while we're at it).
     cv::Mat K;
     cv::Mat distortionCoeffs;
-    if ( !loadSettings( K, distortionCoeffs ) )
+    if ( !loadSettings( K, distortionCoeffs ) ) {
         return 1;
+    }
 
     // Get the previous frame
     Frame current_frame;
     Frame previous_frame;
 
-    inputSource->getFrame(previous_frame);
+    inputSource->getFrame( previous_frame );
 
     // Detect features
     brisk.detect( previous_frame.img, previous_keypoints );    
     brisk.compute( previous_frame.img, previous_keypoints, previous_descriptors );
 
     // Hartley matrices
-    cv::Mat hartley_W = ( cv::Mat_<double>(3,3) << 0,-1, 0, 1, 0, 0, 0, 0, 1 );
-    cv::Mat hartley_Z = ( cv::Mat_<double>(3,3) << 0, 1, 0,-1, 0, 0, 0, 0, 0 );
+    cv::Matx33d hartley_W( 0,-1, 0, 
+                           1, 0, 0,
+                           0, 0, 1 );
+
+    cv::Matx33d hartley_Z( 0, 1, 0, 
+                          -1, 0, 0,
+                           0, 0, 0 );
 
     while ( (char) cv::waitKey( 30 ) == -1 ) {
         // Retrieve an image
-        if(!inputSource->getFrame(current_frame))
-        {
+        if ( !inputSource->getFrame( current_frame ) ) {
             std::cout << "Can not read the next frame." << std::endl;
             break;
         }
-        if (!current_frame.img.data)
-        {
+        if ( !current_frame.img.data ) {
             std::cerr << "No image found." << std::endl;
             return 1;
         }
@@ -231,15 +223,14 @@ int main( int argc, char* argv[] ) {
         brisk.detect( current_frame.img, current_keypoints );
 
         // TODO : What if zero features found?
-        if(previous_keypoints.size() == 0)
-        {
+        if ( previous_keypoints.size() == 0 ) {
             continue;
         }
 
         brisk.compute( current_frame.img, current_keypoints, current_descriptors );
 
         // Match descriptor vectors using FLANN matcher
-        cv::FlannBasedMatcher matcher(new cv::flann::LshIndexParams(20,10,2));
+        cv::FlannBasedMatcher matcher( new cv::flann::LshIndexParams( 20, 10, 2 ) );
         std::vector<cv::DMatch> matches;
 
         matcher.match( current_descriptors, previous_descriptors, matches );
@@ -259,11 +250,11 @@ int main( int argc, char* argv[] ) {
 
             current_centroid.x += cp.x;
             current_centroid.y += cp.y;
-            current_points.push_back(cp);
+            current_points.push_back( cp );
 
             previous_centroid.x += pp.x;
             previous_centroid.y += pp.y;
-            previous_points.push_back(pp);
+            previous_points.push_back( pp );
         }
 
         // Normalize the centroids
@@ -295,43 +286,37 @@ int main( int argc, char* argv[] ) {
         previous_scaling = sqrt( 2.0 ) * (double) matches.size() / previous_scaling;
 
         // Compute transformation matrices
-        cv::Mat current_T, previous_T;
-        current_T = ( cv::Mat_<double>(3,3) <<
-            current_scaling, 0,               -current_scaling * current_centroid.x,
-            0,               current_scaling, -current_scaling * current_centroid.y,
-            0,               0,               1
-            );
+        cv::Matx33d current_T( current_scaling, 0,               -current_scaling * current_centroid.x,
+                               0,               current_scaling, -current_scaling * current_centroid.y,
+                               0,               0,               1 
+                             );
 
-        previous_T = ( cv::Mat_<double>(3,3) <<
-            previous_scaling, 0,                -previous_scaling * previous_centroid.x,
-            0,                previous_scaling, -previous_scaling * previous_centroid.y,
-            0,                0,                1
-            );
+        cv::Matx33d previous_T ( previous_scaling, 0,                -previous_scaling * previous_centroid.x,
+                                 0,                previous_scaling, -previous_scaling * previous_centroid.y,
+                                 0,                0,                1
+                               );
 
         for ( int i = 0; i < matches.size(); i++ ) {
-            cp_ptr = &current_points[i];
-            pp_ptr = &previous_points[i];
-
-            *cp_ptr *= current_scaling;
-            *pp_ptr *= previous_scaling;
+            current_points[i]  *= current_scaling;
+            previous_points[i] *= previous_scaling;
         }
+
         std::vector<cv::Point2f> current_points_good, previous_points_good;
         std::vector<cv::DMatch> good_matches;
 
         // Find the fundamental matrix.
-        double minVal,maxVal;
-        cv::minMaxIdx(previous_points, &minVal, &maxVal);
+        double minVal, maxVal;
+        cv::minMaxIdx( previous_points, &minVal, &maxVal );
 
-        std::vector<uchar> status(matches.size());
-        cv::Mat F = cv::findFundamentalMat( previous_points, current_points, status, cv::FM_RANSAC, 0.006 * maxVal, 0.99);
+        std::vector<uchar> status( matches.size() );
+        cv::Mat F = cv::findFundamentalMat( previous_points, current_points, status, cv::FM_RANSAC, 0.006 * maxVal, 0.99 );
 
         // Scale up again
         F = current_T.t() * F * previous_T;
 
         // Reject outliers
         for ( int i = 0; i < matchesSize; i++ ) {
-            if(status[i])
-            {
+            if( status[i] ) {
                 current_points_good.push_back( current_keypoints[matches[i].queryIdx].pt );
                 previous_points_good.push_back( previous_keypoints[matches[i].trainIdx].pt );
 
@@ -366,7 +351,9 @@ int main( int argc, char* argv[] ) {
 
         // Estimation of projection matrix
         cv::Mat R1, R2, t;
-        if(!DecomposeEtoRandT(E, R1, R2, t)) return -1;
+        if( !DecomposeEtoRandT( E, R1, R2, t ) ) {
+            return -1;
+        }
 
         // Check correctness
         if( cv::determinant(R1) < 0 ) R1 = -R1;
@@ -379,9 +366,9 @@ int main( int argc, char* argv[] ) {
         cv::hconcat( R2, -t, possible_projections[3] );
 
         // Construct matrix [I|0]
-        cv::Matx34d P1(1, 0, 0, 0,
-                       0, 1, 0, 0,
-                       0, 0, 1, 0);
+        cv::Matx34d P1( 1, 0, 0, 0,
+                        0, 1, 0, 0,
+                        0, 0, 1, 0 );
         cv::Matx34d P2;
 
         int max_inliers = 0;
@@ -390,43 +377,38 @@ int main( int argc, char* argv[] ) {
         cv::Matx34d best_transform;
 
         // Loop over possible candidates
-        for(int i = 0 ; i < 4; i ++ )
-        {
+        for ( int i = 0 ; i < 4; i++ ) {
             P2 = possible_projections[i];
 
             int num_inliers = 0;
 
             for ( int m = 0; m < (int) good_matches.size(); m++ ) {
-                cv::Point3f previous_point_homogeneous ( previous_points_good[m].x,
-                                                         previous_points_good[m].y,
-                                                         1 );
-                cv::Point3f current_point_homogeneous ( current_points_good[m].x,
-                                                        current_points_good[m].y,
+                cv::Point3f previous_point_homogeneous( previous_points_good[m].x,
+                                                        previous_points_good[m].y,
                                                         1 );
+                cv::Point3f current_point_homogeneous( current_points_good[m].x,
+                                                       current_points_good[m].y,
+                                                       1 );
 
-                cv::Matx31d X_a = IterativeLinearLSTriangulation(previous_point_homogeneous,	//homogenous image point (u,v,1)
-                                                             P1,                        	//camera 1 matrix
-                                                             current_point_homogeneous, 	//homogenous image point in 2nd camera
-                                                             P2                          	//camera 2 matrix
-                                                             );
-
+                cv::Matx31d X_a = IterativeLinearLSTriangulation( 
+                    previous_point_homogeneous,	P1,
+                    current_point_homogeneous, P2 );
 
                 X.at<double>(0,m) = X_a(0);
                 X.at<double>(1,m) = X_a(1);
                 X.at<double>(2,m) = X_a(2);
 
-                if(X.at<double>(0,m) > 0)
-                {
+                if ( X.at<double>(0,m) > 0 ) {
                     num_inliers++;
                 }
             }
-            if (num_inliers > max_inliers)
-            {
+            if ( num_inliers > max_inliers ) {
                 best_X = X.clone();
                 max_inliers = num_inliers;
                 best_transform = P2;
             }
         }
+
         std::cout << matrixToString(best_X.t()) << std::endl;
         std::cout << best_transform << std::endl;
 
@@ -456,20 +438,20 @@ int main( int argc, char* argv[] ) {
 
             // Method 1
             A.at<float>(i,1) = s_t_w * p.x - s_t_u;
-            b.at<float>(i,1) = ((cv::Mat)(temp1 * point3D)).at<float>(0,0);
+            b.at<float>(i,1) = ( (cv::Mat) ( temp1 * point3D ) ).at<float>(0,0);
 
             // Method 2
             A.at<float>(i+1,1) = s_t_w * p.y - s_t_v;
-            b.at<float>(i+1,1) = ((cv::Mat)(temp2 * point3D)).at<float>(0,0);
+            b.at<float>(i+1,1) = ( (cv::Mat) ( temp2 * point3D ) ).at<float>(0,0);
 
             // Together, these comprise method 3
             i = i + 2;
         }      
-        A = (A.t() * A).inv() * A.t();
+        A = ( A.t() * A ).inv() * A.t();
 
-        std::cout << matrixToString((cv::Mat)(A*b)) << std::endl;
+        std::cout << matrixToString( (cv::Mat) ( A * b ) ) << std::endl;
 
-        double s = ((cv::Mat)(A * b)).at<double>(0,0);
+        double s = ( (cv::Mat) ( A * b ) ).at<double>(0,0);
         std::cout << "Found scale difference: " << s << std::endl;
 
         // Assign current values to the previous ones, for the next iteration
