@@ -36,7 +36,7 @@ bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
     cv::SVD svd(E, cv::SVD::MODIFY_A);
 
     //check if first and second singular values are the same (as they should be)
-    double singular_values_ratio = fabsf( svd.w.at<double>( 0 ) / svd.w.at<double>( 1 ) );
+    double singular_values_ratio = fabs( svd.w.at<double>( 0 ) / svd.w.at<double>( 1 ) );
     std::cout << svd.w << std::endl;
     if ( singular_values_ratio > 1.0 ) {
         singular_values_ratio = 1.0/singular_values_ratio; // flip ratio to keep it [0,1]
@@ -46,7 +46,7 @@ bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
         return false;
     }
 
-    cv::Matx33d W(  0, -1,  0,	//HZ 9.13
+    cv::Matx33d W(  0, -1,  0,	//HZ 9.513
                     1,  0,  0,
                     0,  0,  1 );
     cv::Matx33d Wt( 0,  1,  0,
@@ -95,7 +95,7 @@ cv::Mat_<double> LinearLSTriangulation( cv::Point3d u1, cv::Matx34d P1, cv::Poin
                  );
 
     cv::Mat_<double> X;
-    cv::solve(A,B,X,cv::DECOMP_SVD);
+    cv::solve( A, B, X, cv::DECOMP_SVD );
 
     return X;
 }
@@ -120,7 +120,7 @@ cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::P
         double p2x2 = cv::Mat_<double>( P2.row( 2 ) * X )(0);
 
         // Breaking point
-        if ( fabsf( wi1 - p2x1 ) <= EPSILON && fabsf( wi2 - p2x2 ) <= EPSILON ) break;
+        if ( fabs( wi1 - p2x1 ) <= EPSILON && fabs( wi2 - p2x2 ) <= EPSILON ) break;
 
         wi1 = p2x1;
         wi2 = p2x2;
@@ -266,11 +266,7 @@ int main( int argc, char* argv[] ) {
         double current_scaling = 0;
         double previous_scaling = 0;
 
-        cv::Point2f *cp_ptr, *pp_ptr;
-        for ( int i = 0; i < matches.size(); i++ ) {
-            //cp_ptr = &current_points[i];
-            //pp_ptr = &previous_points[i];
-
+        for ( size_t i = 0; i < matches.size(); i++ ) {
             current_points[i] -= current_centroid;
             previous_points[i] -= previous_centroid;
 
@@ -294,7 +290,7 @@ int main( int argc, char* argv[] ) {
                                  0,                0,                1
                                );
 
-        for ( int i = 0; i < matches.size(); i++ ) {
+        for ( size_t i = 0; i < matches.size(); i++ ) {
             current_points[i]  *= current_scaling;
             previous_points[i] *= previous_scaling;
         }
