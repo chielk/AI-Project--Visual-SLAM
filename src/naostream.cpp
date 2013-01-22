@@ -27,6 +27,7 @@
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
 #define THRESHOLD 40
+#define VERBOSE false
 
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 
@@ -37,12 +38,13 @@ bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
 
     //check if first and second singular values are the same (as they should be)
     double singular_values_ratio = fabs( svd.w.at<double>( 0 ) / svd.w.at<double>( 1 ) );
-    std::cout << svd.w << std::endl;
     if ( singular_values_ratio > 1.0 ) {
         singular_values_ratio = 1.0/singular_values_ratio; // flip ratio to keep it [0,1]
     }
-    if ( singular_values_ratio < 0.4 ) {
+    if ( singular_values_ratio < 0.7 ) {
         std::cout << "singular values are too far apart\n" << std::endl;
+        std::cout << svd.w << std::endl;
+
         return false;
     }
 
@@ -170,15 +172,11 @@ int main( int argc, char* argv[] ) {
 
     cv::Mat current_descriptors, previous_descriptors;
     KeyPointVector current_keypoints, previous_keypoints;
+    std::vector<cv::DMatch> matches;
+    cv::Matx41d robotPosition (0.0, 0.0, 0.0, 1.0);
 
     cv::BRISK brisk(60, 4, 1.0f);
     brisk.create("BRISK");
-
-    //cv::Ptr<cv::FeatureDetector> detector = cv::FeatureDetector::create( "BRISK" );
-    //cv::Ptr<cv::DescriptorExtractor> extractor = cv::DescriptorExtractor::create( "BRISK" );
-
-    //cv::Ptr<cv::FeatureDetector> detector = cv::Algorithm::create<cv::FeatureDetector>( "Feature2D.BRISK" );
-    //cv::Ptr<cv::DescriptorExtractor> extractor = cv::Algorithm::create<cv::DescriptorExtractor>( "Feature2D.BRISK" );
 
     // Load calibrationmatrix K (and distortioncoefficients while we're at it).
     cv::Matx33d K;
@@ -190,7 +188,6 @@ int main( int argc, char* argv[] ) {
     // Get the previous frame
     Frame current_frame;
     Frame previous_frame;
-
     inputSource->getFrame( previous_frame );
 
     // Detect features
@@ -229,7 +226,6 @@ int main( int argc, char* argv[] ) {
 
         // Match descriptor vectors using FLANN matcher
         cv::FlannBasedMatcher matcher( new cv::flann::LshIndexParams( 20, 10, 2 ) );
-        std::vector<cv::DMatch> matches;
 
         matcher.match( current_descriptors, previous_descriptors, matches );
 
@@ -304,7 +300,7 @@ int main( int argc, char* argv[] ) {
         double minVal, maxVal;
         cv::minMaxIdx( previous_points, &minVal, &maxVal );
 
-        std::vector<uchar> status( matches.size() );
+        std::vector<uchar> status( matchesSize );
         cv::Matx33d F = cv::findFundamentalMat( previous_points, current_points, status, cv::FM_RANSAC, 0.006 * maxVal, 0.99 );
 
         // Scale up again
@@ -328,24 +324,11 @@ int main( int argc, char* argv[] ) {
         }
         // Distance
         mean_distance /= (double)good_matches.size();
-
-        std::cout << "Matches before pruning: " << matchesSize << "\n" <<
+#if VERBOSE
+        std::cout << "Matches before pruning: " << matches.size() << ". " <<
                      "Matches after: " << good_matches.size() << "\n" <<
                      "Mean displacement: " << mean_distance << std::endl;
-
-        if (mean_distance < THRESHOLD)
-        {
-            if (mean_distance < 1)
-            {
-                // whtat
-                int x = 1;
-            }
-
-            std::cout << "Displacement not sufficiently large, skipping frame." << std::endl;
-            continue;
-
-        }
-
+#endif
 
         //// Check : These values should be 0 (or close to it)
         //for(int i = 0; i < current_points_good.size(); i++) {
@@ -363,6 +346,19 @@ int main( int argc, char* argv[] ) {
         // Show detected matches
         imshow( "Good Matches", img_matches );
         imwrite("some.png", img_matches);
+
+        if (mean_distance < THRESHOLD)
+        {
+            if (mean_distance < 1)
+            {
+                // what the fuck just happened
+                std::cout << "wut 0 mean_distance wut" << std::endl;
+            }
+#if VERBOSE
+            std::cout << "Displacement not sufficiently large, skipping frame." << std::endl;
+#endif
+            continue;
+        }
 
         // Compute essential matrix
         //std::cout << "Fundamental:\n" << F <<  std::endl;
@@ -430,13 +426,27 @@ int main( int argc, char* argv[] ) {
                 best_transform = P2;
             }
         }
-
-        //std::cout << matrixToString(best_X.t()) << std::endl;
+#if VERBOSE
+        std::cout << matrixToString(best_X.t()) << std::endl;
         std::cout << best_transform << "\n" << std::endl;
+#endif
 
         // SOLVE THEM SCALE ISSUES for m = 1;
         //double scale = solveScale(best_X, best_transform);
         //std::cout << "Scale : " << scale << std::endl;
+
+        // TODO BE SMART
+        cv::Matx44d transformationMatrix( best_transform(0,0),best_transform(0,1),best_transform(0,2),best_transform(0,3),
+                                          best_transform(1,0),best_transform(1,1),best_transform(1,2),best_transform(1,3),
+                                          best_transform(2,0),best_transform(2,1),best_transform(2,2),best_transform(2,3),
+                                          0, 0, 0, 1 );
+        robotPosition = transformationMatrix * robotPosition;
+        robotPosition(0,0) /= robotPosition(3,0);
+        robotPosition(1,0) /= robotPosition(3,0);
+        robotPosition(2,0) /= robotPosition(3,0);
+        robotPosition(3,0) /= robotPosition(3,0);
+
+        std::cout << robotPosition.t() << std::endl;
 
         // Assign current values to the previous ones, for the next iteration
         previous_keypoints = current_keypoints;
