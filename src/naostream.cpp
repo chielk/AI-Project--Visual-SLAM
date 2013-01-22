@@ -288,7 +288,6 @@ int main( int argc, char* argv[] ) {
             previous_scaling += sqrt( pp_ptr->dot( *pp_ptr ) );
         }
 
-        std::cout << current_centroid << " "  << previous_centroid << std::endl;
 
         // Enforce mean distance sqrt( 2 ) from origin
         current_scaling  = sqrt( 2.0 ) * (double) matches.size() / current_scaling;
@@ -341,8 +340,10 @@ int main( int argc, char* argv[] ) {
         }
         std::cout << "Matches before pruning: " << matchesSize << "\n" << "Matches after: " << good_matches.size() << std::endl;
 
+
+        //// Check : These values should be 0 (or close to it)
         //for(int i = 0; i < current_points_good.size(); i++) {
-        //    std::cout << (cv::Mat) cv::Matx31d(current_points_good[i].x, current_points_good[i].y, 1).t() * K * (cv::Mat) cv::Matx31d(previous_points_good[i].x, previous_points_good[i].y, 1) << std::endl;
+        //    std::cout << (cv::Mat) cv::Matx31d(current_points_good[i].x, current_points_good[i].y, 1).t() * F * (cv::Mat) cv::Matx31d(previous_points_good[i].x, previous_points_good[i].y, 1) << std::endl;
         //}
 
         // Draw only "good" matches
@@ -358,7 +359,6 @@ int main( int argc, char* argv[] ) {
         imwrite("some.png", img_matches);
 
         // Compute essential matrix
-        std::cout << F <<  std::endl;
         std::cout << "Fundamental:\n" << F <<  std::endl;
 
         cv::Matx33d E (cv::Mat(K.t() * F * K));
@@ -386,7 +386,6 @@ int main( int argc, char* argv[] ) {
 
         int max_inliers = 0;
         cv::Mat best_X ( 4, good_matches.size(), CV_64F, cv::Scalar( 1 ) );
-        cv::Mat X ( 4, good_matches.size(), CV_64F, cv::Scalar( 1 ) );
         cv::Matx34d best_transform;
 
         // Loop over possible candidates
@@ -394,6 +393,7 @@ int main( int argc, char* argv[] ) {
         {
             P2 = possible_projections[i];
 
+            cv::Mat X ( 4, good_matches.size(), CV_64F, cv::Scalar( 1 ) );
             int num_inliers = 0;
 
             for ( int m = 0; m < (int) good_matches.size(); m++ ) {
@@ -431,46 +431,8 @@ int main( int argc, char* argv[] ) {
         std::cout << best_transform << std::endl;
 
         // SOLVE THEM SCALE ISSUES for m = 1;
-        cv::Mat A (2 * good_matches.size(), 1, CV_32F, 0.0f);
-        cv::Mat b (2 * good_matches.size(), 1, CV_32F, 0.0f);
-        cv::Point p;
-
-        cv::Matx<double,1,4> r1 = P2.row(0);
-        cv::Matx<double,1,4> r2 = P2.row(1);
-        cv::Matx<double,1,4> r3 = P2.row(2);
-        cv::Mat temp1;
-        cv::Mat temp2;
-        cv::Mat point3D;
-
-        double s_t_u = P2(0,3);
-        double s_t_v = P2(1,3);
-        double s_t_w = P2(1,3);
-
-        int i = 0;
-        for ( match_it = good_matches.begin(); match_it != good_matches.end(); match_it++ ) {
-            p = current_keypoints[match_it->queryIdx].pt;
-            point3D = X.col(i / 2);
-
-            cv::subtract(r1, r3 * p.x, temp1);
-            cv::subtract(r2, r3 * p.y, temp2);
-
-            // Method 1
-            A.at<float>(i,1) = s_t_w * p.x - s_t_u;
-            b.at<float>(i,1) = ((cv::Mat)(temp1 * point3D)).at<float>(0,0);
-
-            // Method 2
-            A.at<float>(i+1,1) = s_t_w * p.y - s_t_v;
-            b.at<float>(i+1,1) = ((cv::Mat)(temp2 * point3D)).at<float>(0,0);
-
-            // Together, these comprise method 3
-            i = i + 2;
-        }      
-        A = (A.t() * A).inv() * A.t();
-
-        std::cout << matrixToString((cv::Mat)(A*b)) << std::endl;
-
-        double s = ((cv::Mat)(A * b)).at<double>(0,0);
-        std::cout << "Found scale difference: " << s << std::endl;
+        double scale = solveScale(best_X, best_transform);
+        cout << "Scale : " << scale << std::endl;
 
         // Assign current values to the previous ones, for the next iteration
         previous_keypoints = current_keypoints;
@@ -480,3 +442,45 @@ int main( int argc, char* argv[] ) {
     return 0;
 }
 
+double solveScale(cv::Mat_<double> X, cv::Matx34d RTMatrix) {
+    cv::Mat_<double> A (2 * X.size().width, 1, CV_32F, 0.0f);
+    cv::Mat_<double> b (2 * X.size().width, 1, CV_32F, 0.0f);
+    cv::Point p;
+
+    cv::Matx<double,1,4> r1 = P2.row(0);
+    cv::Matx<double,1,4> r2 = P2.row(1);
+    cv::Matx<double,1,4> r3 = P2.row(2);
+    cv::Mat temp1;
+    cv::Mat temp2;
+    cv::Mat point3D;
+
+    double s_t_u = RTMatrix(0,3);
+    double s_t_v = RTMatrix(1,3);
+    double s_t_w = RTMatrix(1,3);
+
+    int i = 0;
+    for ( match_it = good_matches.begin(); match_it != good_matches.end(); match_it++ ) {
+        p = current_keypoints[match_it->queryIdx].pt;
+        point3D = X.col(i / 2);
+
+        cv::subtract(r1, r3 * p.x, temp1);
+        cv::subtract(r2, r3 * p.y, temp2);
+
+        // Method 1
+        A.at<float>(i,1) = s_t_w * p.x - s_t_u;
+        b.at<float>(i,1) = ((cv::Mat)(temp1 * point3D)).at<float>(0,0);
+
+        // Method 2
+        A.at<float>(i+1,1) = s_t_w * p.y - s_t_v;
+        b.at<float>(i+1,1) = ((cv::Mat)(temp2 * point3D)).at<float>(0,0);
+
+        // Together, these comprise method 3
+        i = i + 2;
+    }
+    A = (A.t() * A).inv() * A.t();
+
+    std::cout << matrixToString((cv::Mat)(A*b)) << std::endl;
+
+    double s = ((cv::Mat)(A * b)).at<double>(0,0);
+    std::cout << "Found scale difference: " << s << std::endl;
+}
