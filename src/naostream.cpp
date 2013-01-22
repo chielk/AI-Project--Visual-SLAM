@@ -26,10 +26,9 @@
 
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
+#define THRESHOLD 100
 
 typedef std::vector<cv::KeyPoint> KeyPointVector;
-
-
 
 
 bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
@@ -117,8 +116,8 @@ cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::P
         X = cv::Matx41d( X_(0), X_(1), X_(2), 1.0 );
 
         // Recalculate weights
-        double p2x1 = cv::Mat_<double>(cv::Mat_<double>(P).row(2)*X)(0);
-        double p2x2 = cv::Mat_<double>(cv::Mat_<double>(P2).row(2)*X)(0);
+        double p2x1 = cv::Mat_<double>( P1.row( 2 ) * X )(0);
+        double p2x2 = cv::Mat_<double>( P2.row( 2 ) * X )(0);
 
         // Breaking point
         if ( fabsf( wi1 - p2x1 ) <= EPSILON && fabsf( wi2 - p2x2 ) <= EPSILON ) break;
@@ -183,9 +182,9 @@ int main( int argc, char* argv[] ) {
     //cv::Ptr<cv::DescriptorExtractor> extractor = cv::Algorithm::create<cv::DescriptorExtractor>( "Feature2D.BRISK" );
 
     // Load calibrationmatrix K (and distortioncoefficients while we're at it).
-    cv::Mat K;
+    cv::Matx33d K;
     cv::Mat distortionCoeffs;
-    if ( !loadSettings( K, distortionCoeffs ) ) {
+    if ( !loadSettings( (cv::Mat) K, distortionCoeffs ) ) {
         return 1;
     }
 
@@ -269,14 +268,14 @@ int main( int argc, char* argv[] ) {
 
         cv::Point2f *cp_ptr, *pp_ptr;
         for ( int i = 0; i < matches.size(); i++ ) {
-            cp_ptr = &current_points[i];
-            pp_ptr = &previous_points[i];
+            //cp_ptr = &current_points[i];
+            //pp_ptr = &previous_points[i];
 
-            *cp_ptr -= current_centroid;
-            *pp_ptr -= previous_centroid;
+            current_points[i] -= current_centroid;
+            previous_points[i] -= previous_centroid;
 
-            current_scaling += sqrt( cp_ptr->dot( *cp_ptr ) );
-            previous_scaling += sqrt( pp_ptr->dot( *pp_ptr ) );
+            current_scaling += sqrt( current_points[i].dot( current_points[i] ) );
+            previous_scaling += sqrt( previous_points[i].dot( previous_points[i] ) );
         }
 
         std::cout << current_centroid << " "  << previous_centroid << std::endl;
@@ -309,7 +308,7 @@ int main( int argc, char* argv[] ) {
         cv::minMaxIdx( previous_points, &minVal, &maxVal );
 
         std::vector<uchar> status( matches.size() );
-        cv::Mat F = cv::findFundamentalMat( previous_points, current_points, status, cv::FM_RANSAC, 0.006 * maxVal, 0.99 );
+        cv::Matx33d F = cv::findFundamentalMat( previous_points, current_points, status, cv::FM_RANSAC, 0.006 * maxVal, 0.99 );
 
         // Scale up again
         F = current_T.t() * F * previous_T;
@@ -409,7 +408,7 @@ int main( int argc, char* argv[] ) {
             }
         }
 
-        std::cout << matrixToString(best_X.t()) << std::endl;
+        //std::cout << matrixToString(best_X.t()) << std::endl;
         std::cout << best_transform << std::endl;
 
         // SOLVE THEM SCALE ISSUES for m = 1;
@@ -433,8 +432,8 @@ int main( int argc, char* argv[] ) {
             p = current_keypoints[match_it->queryIdx].pt;
             point3D = X.col(i / 2);
 
-            cv::subtract(r1, r3 * p.x, temp1);
-            cv::subtract(r2, r3 * p.y, temp2);
+            cv::subtract( r1, r3 * p.x, temp1 );
+            cv::subtract( r2, r3 * p.y, temp2 );
 
             // Method 1
             A.at<float>(i,1) = s_t_w * p.x - s_t_u;
