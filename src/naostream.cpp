@@ -1,13 +1,13 @@
-    /**
-    *
-    * This example demonstrates how to get images from the robot remotely and how
-    * to display them on your screen using opencv.
-    *
-    * Copyright Aldebaran Robotics
-    */
+/**
+*
+* This example demonstrates how to get images from the robot remotely and how
+* to display them on your screen using opencv.
+*
+* Copyright Aldebaran Robotics
+*/
 
-    #include <alproxies/alvideodeviceproxy.h>
-    #include <alvision/alimage.h>
+#include <alproxies/alvideodeviceproxy.h>
+#include <alvision/alimage.h>
 #include <alvision/alvisiondefinitions.h>
 #include <alerror/alerror.h>
 #include <alproxies/almotionproxy.h>
@@ -251,6 +251,15 @@ bool VisualOdometry::MainLoop() {
     cv::Mat total_3D_descriptors;
     cv::Mat total_2D_descriptors;
 
+    // Construct matrix [I|0]
+    cv::Matx34d P1( 1, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0, 1, 0 );
+    // Ready for construction of matrix [R|t]
+    cv::Matx34d P2;
+
+
+
     while ( (char) cv::waitKey( 30 ) == -1 ) {
         // Retrieve an image
         if ( !inputSource->getFrame( current_frame ) ) {
@@ -298,15 +307,9 @@ bool VisualOdometry::MainLoop() {
             cv::solvePnPRansac(objectpoints, imagepoints, K, distortionCoeffs, rvec, tvec,
                                false, 100, 8.0, 100, inliers);
 
-            // Construct matrix [I|0]
-            cv::Matx34d P1( 1, 0, 0, 0,
-                            0, 1, 0, 0,
-                            0, 0, 1, 0 );
-
             // Construct matrix [R|t]
             cv::Matx33d R;
             cv::Rodrigues(rvec, R);
-            cv::Matx34d P2;
             cv::hconcat(R, tvec, P2);
 
             std::cout << P2 << std::endl;
@@ -324,7 +327,7 @@ bool VisualOdometry::MainLoop() {
             cv::Matx33d fundamental;
             std::vector<cv::Point2f> previous_points_inliers, current_points_inliers;
 
-            double mean_dist = determineFundamentalMatrix(matching_2D_points,
+            double mean_distance = determineFundamentalMatrix(matching_2D_points,
                                                           current_points,
                                                           previous_points_inliers,
                                                           current_points_inliers,
@@ -334,27 +337,74 @@ bool VisualOdometry::MainLoop() {
 
             cv::Mat X ( 4, matches.size(), CV_64F, cv::Scalar( 1 ) );
 
-            for ( int m = 0; m < (int) matches.size(); m++ ) {
-                cv::Point3f previous_point_homogeneous( previous_points_inliers[m].x,
-                                                        previous_points_inliers[m].y,
-                                                        1 );
-                cv::Point3f current_point_homogeneous( current_points_inliers[m].x,
-                                                       current_points_inliers[m].y,
-                                                       1 );
-
-                cv::Matx31d X_a = IterativeLinearLSTriangulation(
-                    previous_point_homogeneous,	P1,
-                    current_point_homogeneous, P2 );
-
-                X.at<double>(0,m) = X_a(0);
-                X.at<double>(1,m) = X_a(1);
-                X.at<double>(2,m) = X_a(2);
+            // If displacement is not sufficiently large, skip this image.
+            if (mean_distance < THRESHOLD)
+            {
+                if (mean_distance < 1)
+                {
+                    // what the fuck just happened
+                    std::cout << "wut 0 mean_distance wut" << std::endl;
+                }
+    #if VERBOSE
+                std::cout << "Displacement not sufficiently large, skipping frame." << std::endl;
+    #endif
+                continue;
             }
 
-            // Add to all_descriptors and 3d point cloud
+            // Compute essential matrix
+            cv::Matx33d E (cv::Mat(K.t() * fundamental * K));
+
+            // Estimation of projection matrix
+            cv::Mat R1, R2, t;
+            if( !DecomposeEtoRandT( E, R1, R2, t ) ) {
+                return false;
+            }
+
+            // Check correctness(!(cv::Mat(visualOdometry->K).empty()))
+            if ( cv::determinant(R1) < 0 ) R1 = -R1;
+            if ( cv::determinant(R2) < 0 ) R2 = -R2;
+
+            cv::Mat possible_projections[4];
+            cv::hconcat( R1,  t, possible_projections[0] );
+            cv::hconcat( R1, -t, possible_projections[1] );
+            cv::hconcat( R2,  t, possible_projections[2] );
+            cv::hconcat( R2, -t, possible_projections[3] );
+
+            cv::Mat best_X ( 4, matches.size(), CV_64F );
+            cv::Matx34d best_transform;
+
+            // Loop over possible candidates
+            for ( int i = 0 ; i < 4; i++ ) {
+                P2 = possible_projections[i];
+
+                cv::Mat X ( 4, matches.size(), CV_64F, cv::Scalar( 1 ) );
+                int num_inliers = 0;
+
+                // TODO replace by iterator?
+                for ( int m = 0; m < (int) matches.size(); m++ ) {
+
+                    cv::Point3f previous_point_homogeneous( previous_points_inliers[m].x,
+                                                            previous_points_inliers[m].y,
+                                                            1 );
+                    cv::Point3f current_point_homogeneous( current_points_inliers[m].x,
+                                                           current_points_inliers[m].y,
+                                                           1 );
+
+                    cv::Matx31d X_a = IterativeLinearLSTriangulation(
+                        previous_point_homogeneous,	P1,
+                        current_point_homogeneous, P2 );
+
+                    X.at<double>(0,m) = X_a(0);
+                    X.at<double>(1,m) = X_a(1);
+                    X.at<double>(2,m) = X_a(2);
+                }
+            }
+
+       // Add to all_descriptors and 3d point cloud
 
 
         } else {
+
             // CASE 0: frame-to-frame
 
             // Match descriptor vectors using FLANN matcher
