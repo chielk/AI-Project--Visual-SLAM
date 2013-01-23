@@ -1,13 +1,13 @@
-/**
-*
-* This example demonstrates how to get images from the robot remotely and how
-* to display them on your screen using opencv.
-*
-* Copyright Aldebaran Robotics
-*/
+    /**
+    *
+    * This example demonstrates how to get images from the robot remotely and how
+    * to display them on your screen using opencv.
+    *
+    * Copyright Aldebaran Robotics
+    */
 
-#include <alproxies/alvideodeviceproxy.h>
-#include <alvision/alimage.h>
+    #include <alproxies/alvideodeviceproxy.h>
+    #include <alvision/alimage.h>
 #include <alvision/alvisiondefinitions.h>
 #include <alerror/alerror.h>
 #include <alproxies/almotionproxy.h>
@@ -27,12 +27,29 @@
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
 #define THRESHOLD 40
-#define VERBOSE false
+#define VERBOSE true
 
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 
+class VisualOdometry
+{
+    InputSource *inputSource;
+    cv::Matx33d K;
+    cv::Mat distortionCoeffs;
 
-bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
+    bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t );
+    cv::Mat_<double> LinearLSTriangulation( cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2 );
+    cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2);
+    double solveScale(cv::Mat_<double> X, cv::Matx34d RTMatrix);
+public:
+    VisualOdometry(InputSource *source);
+    ~VisualOdometry();
+    bool MainLoop();
+
+    bool validConfig;
+};
+
+bool VisualOdometry::DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
     //Using HZ E decomposition
     cv::SVD svd(E, cv::SVD::MODIFY_A);
 
@@ -67,7 +84,7 @@ bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
 // Arguments:
 //     u1 and u2: homogenous image point (u,v,1)
 //     P1 and P2: Camera matrices
-cv::Mat_<double> LinearLSTriangulation( cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2 ) {
+cv::Mat_<double> VisualOdometry::LinearLSTriangulation( cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2 ) {
     //build matrix A for homogenous equation system Ax = 0
     //assume X = (x,y,z,1), for Linear-LS method
     //which turns it into a AX = B system, where A is 4x3, X is 3x1 and B is 4x1
@@ -105,7 +122,7 @@ cv::Mat_<double> LinearLSTriangulation( cv::Point3d u1, cv::Matx34d P1, cv::Poin
 /**
 From "Triangulation", Hartley, R.I. and Sturm, P., Computer vision and image understanding, 1997
 */
-cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2	) {
+cv::Matx31d VisualOdometry::IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2	) {
     double wi1 = 1;
     double wi2 = 1;
 
@@ -145,45 +162,16 @@ cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::P
     return cv::Matx31d( X(0), X(1), X(2) );
 }
 
-
-
-int main( int argc, char* argv[] ) {
-    if ( argc < 3 ) {
-        std::cerr << "Usage" << argv[0] << " '(-n robotIp|-f folderName)'" << std::endl;
-        return 1;
-    }
-
-    InputSource *inputSource;
-
-    if ( std::string(argv[1]) == "-n" ) {
-        const std::string robotIp( argv[2] );
-        inputSource = new NaoInput( robotIp );
-    } else if ( std::string(argv[1]) == "-f" ) {
-        const std::string folderName(argv[2]);
-        inputSource = new FileInput( folderName );
-    } else {
-        std::cout << "Wrong use of command line arguments." << std::endl;
-        return 1;
-    }
-
-    std::string name = "brisk_test";
-    cv::Size imageSize = cv::Size(640, 480);
-    int channels = CV_8UC3;
-
+bool VisualOdometry::MainLoop() {
+    // Declare neccessary storage variables
     cv::Mat current_descriptors, previous_descriptors;
     KeyPointVector current_keypoints, previous_keypoints;
     std::vector<cv::DMatch> matches;
     cv::Matx41d robotPosition (0.0, 0.0, 0.0, 1.0);
 
+    // Create brisk detector
     cv::BRISK brisk(60, 4, 1.0f);
     brisk.create("BRISK");
-
-    // Load calibrationmatrix K (and distortioncoefficients while we're at it).
-    cv::Matx33d K;
-    cv::Mat distortionCoeffs;
-    if ( !loadSettings( K, distortionCoeffs ) ) {
-        return 1;
-    }
 
     // Get the previous frame
     Frame current_frame;
@@ -194,15 +182,6 @@ int main( int argc, char* argv[] ) {
     brisk.detect( previous_frame.img, previous_keypoints );    
     brisk.compute( previous_frame.img, previous_keypoints, previous_descriptors );
 
-    // Hartley matrices
-    cv::Matx33d hartley_W( 0,-1, 0, 
-                           1, 0, 0,
-                           0, 0, 1 );
-
-    cv::Matx33d hartley_Z( 0, 1, 0, 
-                          -1, 0, 0,
-                           0, 0, 0 );
-
     while ( (char) cv::waitKey( 30 ) == -1 ) {
         // Retrieve an image
         if ( !inputSource->getFrame( current_frame ) ) {
@@ -211,7 +190,7 @@ int main( int argc, char* argv[] ) {
         }
         if ( !current_frame.img.data ) {
             std::cerr << "No image found." << std::endl;
-            return 1;
+            return false;
         }
 
         // Detect features
@@ -222,26 +201,22 @@ int main( int argc, char* argv[] ) {
             continue;
         }
 
+        // Find descriptors for these features
         brisk.compute( current_frame.img, current_keypoints, current_descriptors );
 
         // Match descriptor vectors using FLANN matcher
         cv::FlannBasedMatcher matcher( new cv::flann::LshIndexParams( 20, 10, 2 ) );
-
         matcher.match( current_descriptors, previous_descriptors, matches );
 
-        // TODO what if keypoints overlap too much with old keypoints
-
-        // Quick calculation of centroid
+        // Calculation of centroid by looping over matches
         std::vector<cv::DMatch>::iterator match_it;
         cv::Point2f current_centroid(0,0);
         cv::Point2f previous_centroid(0,0);
-
         std::vector<cv::Point2f> current_points, previous_points;
         cv::Point2f cp;
         cv::Point2f pp;
 
         for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
-
             cp = current_keypoints[match_it->queryIdx].pt;
             pp = previous_keypoints[match_it->trainIdx].pt;
 
@@ -264,6 +239,7 @@ int main( int argc, char* argv[] ) {
         double current_scaling = 0;
         double previous_scaling = 0;
 
+        // Translate points to have (0,0) as centroid
         for ( size_t i = 0; i < matches.size(); i++ ) {
             current_points[i] -= current_centroid;
             previous_points[i] -= previous_centroid;
@@ -272,8 +248,7 @@ int main( int argc, char* argv[] ) {
             previous_scaling += sqrt( previous_points[i].dot( previous_points[i] ) );
         }
 
-
-        // Enforce mean distance sqrt( 2 ) from origin
+        // Enforce mean distance sqrt( 2 ) from origin (0,0)
         current_scaling  = sqrt( 2.0 ) * (double) matches.size() / current_scaling;
         previous_scaling = sqrt( 2.0 ) * (double) matches.size() / previous_scaling;
 
@@ -288,13 +263,11 @@ int main( int argc, char* argv[] ) {
                                  0,                0,                1
                                );
 
+        // Scale points
         for ( size_t i = 0; i < matches.size(); i++ ) {
             current_points[i]  *= current_scaling;
             previous_points[i] *= previous_scaling;
         }
-
-        std::vector<cv::Point2f> current_points_good, previous_points_good;
-        std::vector<cv::DMatch> good_matches;
 
         // Find the fundamental matrix.
         double minVal, maxVal;
@@ -306,10 +279,11 @@ int main( int argc, char* argv[] ) {
         // Scale up again
         F = current_T.t() * F * previous_T;
 
-        // calc distance between matches
+        // Reject outliers and calc distance between matches
+        std::vector<cv::Point2f> current_points_good, previous_points_good;
+        std::vector<cv::DMatch> good_matches;
         double mean_distance = 0.0;
 
-        // Reject outliers
         for ( int i = 0; i < matchesSize; i++ ) {
             if( status[i] ) {
                 current_points_good.push_back( current_keypoints[matches[i].queryIdx].pt );
@@ -319,23 +293,19 @@ int main( int argc, char* argv[] ) {
                 good_matches.push_back( matches[i] );
 
                 mean_distance += matches[i].distance;
-
             }
         }
-        // Distance
+
+        // Distance calculation
         mean_distance /= (double)good_matches.size();
+
 #if VERBOSE
         std::cout << "Matches before pruning: " << matches.size() << ". " <<
                      "Matches after: " << good_matches.size() << "\n" <<
                      "Mean displacement: " << mean_distance << std::endl;
 #endif
 
-        //// Check : These values should be 0 (or close to it)
-        //for(int i = 0; i < current_points_good.size(); i++) {
-        //    std::cout << (cv::Mat) cv::Matx31d(current_points_good[i].x, current_points_good[i].y, 1).t() * F * (cv::Mat) cv::Matx31d(previous_points_good[i].x, previous_points_good[i].y, 1) << std::endl;
-        //}
-
-        // Draw only "good" matches
+        // Draw only inliers
         cv::Mat img_matches;
         cv::drawMatches(
             current_frame.img, current_keypoints, previous_frame.img, previous_keypoints,
@@ -343,10 +313,10 @@ int main( int argc, char* argv[] ) {
             std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS
             );
 
-        // Show detected matches
         imshow( "Good Matches", img_matches );
         imwrite("some.png", img_matches);
 
+        // If displacement is not sufficiently large, skip this image.
         if (mean_distance < THRESHOLD)
         {
             if (mean_distance < 1)
@@ -361,15 +331,12 @@ int main( int argc, char* argv[] ) {
         }
 
         // Compute essential matrix
-        //std::cout << "Fundamental:\n" << F <<  std::endl;
-
         cv::Matx33d E (cv::Mat(K.t() * F * K));
-        //std::cout << "\nEssential:\n" << E <<  std::endl;
 
         // Estimation of projection matrix
         cv::Mat R1, R2, t;
         if( !DecomposeEtoRandT( E, R1, R2, t ) ) {
-            return -1;
+            return false;
         }
 
         // Check correctness
@@ -389,7 +356,7 @@ int main( int argc, char* argv[] ) {
         cv::Matx34d P2;
 
         int max_inliers = 0;
-        cv::Mat best_X ( 4, good_matches.size(), CV_64F, cv::Scalar( 1 ) );
+        cv::Mat best_X ( 4, good_matches.size(), CV_64F );
         cv::Matx34d best_transform;
 
         // Loop over possible candidates
@@ -423,7 +390,7 @@ int main( int argc, char* argv[] ) {
             if ( num_inliers > max_inliers ) {
                 best_X = X.clone();
                 max_inliers = num_inliers;
-                best_transform = P2;
+                best_transform = cv::Mat(P2).clone();
             }
         }
 #if VERBOSE
@@ -453,10 +420,12 @@ int main( int argc, char* argv[] ) {
         previous_frame = current_frame;
         previous_descriptors = current_descriptors;
     }
-    return 0;
+
+    // Main loop successful.
+    return true;
 }
 
-double solveScale(cv::Mat_<double> X, cv::Matx34d RTMatrix) {
+double VisualOdometry::solveScale(cv::Mat_<double> X, cv::Matx34d RTMatrix) {
 
     return 0.1;
 /**    cv::Mat_<double> A (2 * X.size().width, 1, CV_32F, 0.0f);
@@ -510,3 +479,42 @@ double solveScale(cv::Mat_<double> X, cv::Matx34d RTMatrix) {
     double s = ((cv::Mat)(A * b)).at<double>(0,0);
     std::cout << "Found scale difference: " << s << std::endl;
 **/}
+
+VisualOdometry::VisualOdometry(InputSource *source){
+    this->inputSource = source;
+
+    // Load calibrationmatrix K (and distortioncoefficients while we're at it).
+    this->validConfig = loadSettings( K, distortionCoeffs);
+}
+
+VisualOdometry::~VisualOdometry(){
+    delete this->inputSource;
+}
+
+
+int main( int argc, char* argv[] ) {
+    if ( argc < 3 ) {
+        std::cerr << "Usage" << argv[0] << " '(-n robotIp|-f folderName)'" << std::endl;
+        return 1;
+    }
+
+    VisualOdometry *visualOdometry;
+    InputSource *inputSource;
+
+    if ( std::string(argv[1]) == "-n" ) {
+        const std::string robotIp( argv[2] );
+        inputSource = new NaoInput( robotIp );
+    } else if ( std::string(argv[1]) == "-f" ) {
+        const std::string folderName(argv[2]);
+        inputSource = new FileInput( folderName );
+    } else {
+        std::cout << "Wrong use of command line arguments." << std::endl;
+        return 1;
+    }
+
+    visualOdometry = new VisualOdometry( inputSource );
+    if (visualOdometry->validConfig)
+    {
+        visualOdometry->MainLoop();
+    }
+}

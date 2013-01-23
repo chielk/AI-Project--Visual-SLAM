@@ -11,7 +11,7 @@ bool loadSettings(cv::Matx33d &cameraMatrix, cv::Mat &distortionCoeffs)
 
     if( temp.empty())
     {
-        std::cerr << "No config file present" << std::endl;
+        std::cerr << "No config file present." << std::endl;
         return false;
     }
 
@@ -136,7 +136,7 @@ NaoInput::~NaoInput()
 void NaoInput::subscribe(std::string name, int cameraId=AL::kTopCamera )
 {
     unsubscribe(name);
-    clientName = camProxy->subscribeCamera(name, cameraId, AL::kVGA, AL::kRGBColorSpace, 30);
+    clientName = camProxy->subscribeCamera(name, cameraId, AL::kVGA, AL::kBGRColorSpace, 30);
     std::cout << "Subscribed to cameraproxy " << name << "." << std::endl;
 }
 
