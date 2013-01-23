@@ -323,6 +323,8 @@ bool VisualOdometry::MainLoop() {
             {
                 // what the fuck just happened
                 std::cout << "wut 0 mean_distance wut" << std::endl;
+                AL::ALAudioPlayerProxy aup(robotIp);
+                aup.playFile("mottatnou.mp3")
             }
 #if VERBOSE
             std::cout << "Displacement not sufficiently large, skipping frame." << std::endl;
