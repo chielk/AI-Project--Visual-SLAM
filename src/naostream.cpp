@@ -27,7 +27,7 @@
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
 #define THRESHOLD 0.5
-#define VERBOSE 1
+#define VERBOSE 0
 
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 
@@ -49,6 +49,7 @@ class VisualOdometry
                                       std::vector<cv::Point2f> &current_points_inliers,
                                       std::vector<cv::DMatch> &matches,
                                       cv::Matx33d &F);
+    void determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix);
 public:
     VisualOdometry(InputSource *source);
     ~VisualOdometry();
@@ -330,10 +331,6 @@ bool VisualOdometry::MainLoop() {
                                                           matches,
                                                           fundamental);
 
-            //// Order of rotation must be roll pitch yaw for this to work
-            //double roll = atan2(R(1,0), R(0,0));
-            //double pitch = atan2(-R(2,0), sqrt( pow(R(2,1), 2) + pow(R(2,2), 2) ) );
-            //double yaw = atan2(R(2,1), R(2,2));
 
             cv::Mat X ( 4, matches.size(), CV_64F, cv::Scalar( 1 ) );
 
@@ -570,6 +567,12 @@ bool VisualOdometry::MainLoop() {
 
             std::cout << robotPosition.t() << std::endl;
 
+            double roll, pitch, yaw;
+            determineRollPitchYaw(roll, pitch, yaw, best_transform);
+            std::cout << "roll" << roll << "\n"
+                      << "pitch" << pitch << "\n"
+                      << "yaw" << yaw << std::endl;
+
             // Assign current values to the previous ones, for the next iteration
             previous_keypoints = current_keypoints;
             previous_frame = current_frame;
@@ -625,6 +628,15 @@ double VisualOdometry::solveScale(std::vector<cv::Point2f> imagepoints_normalize
     double s = ((cv::Mat)(A * b)).at<double>(0,0);
 
     return s;
+}
+
+void VisualOdometry::determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix)
+{
+    std::cout << RTMatrix << std::endl;
+    // Order of rotation must be roll pitch yaw for this to work
+    roll = atan2(RTMatrix(1,0), RTMatrix(0,0));
+    pitch = atan2(-RTMatrix(2,0), sqrt( pow(RTMatrix(2,1), 2) + pow(RTMatrix(2,2), 2) ) );
+    yaw = atan2(RTMatrix(2,1), RTMatrix(2,2));
 }
 
 VisualOdometry::VisualOdometry(InputSource *source){
