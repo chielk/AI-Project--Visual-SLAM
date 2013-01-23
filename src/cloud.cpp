@@ -1,37 +1,47 @@
 #include "cloud.hpp"
 
-Cloud::Cloud()
+
+template <class point>
+Cloud<point>::Cloud()
 {
    points = std::vector<point>();
    descriptors = std::vector<point>();
 }
 
-Cloud::Cloud(std::vector<point> ps, std::vector<uchar> ds)
+template <class point>
+Cloud<point>::Cloud(std::vector<point> ps, std::vector<uchar> ds)
 {
    points = ps;
    descriptors = ds;
 }
 
-void Cloud::remove(int index, point &p, uchar &d)
+template <class point>
+void Cloud<point>::remove(int index, point &p, uchar &d)
 {
    p = points.erase(points.begin()+index);
    d = descriptors.erase(descriptors.begin()+index);
 }
 
-void Cloud::remove(int index)
+template <class point>
+void Cloud<point>::remove(int index)
 {
    points.erase(points.begin()+index);
    descriptors.erase(descriptors.begin()+index);
 }
 
-void Cloud::add(point p, uchar d)
+template <class point>
+void Cloud<point>::add(point p, uchar d)
 {
    points.push_back(p);
    descriptors.push_back(d);
 }
 
-void Cloud::remove_last(int n)
+template <class point>
+void Cloud<point>::remove_last(int n)
 {
-   points.erase(points.begin()+index);
-   descriptors.erase(descriptors.begin()+index);
+   if (n <= 0) {
+      return;
+   }
+   points.erase(points.begin()+n);
+   descriptors.erase(descriptors.begin()+n);
 }

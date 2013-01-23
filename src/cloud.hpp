@@ -8,6 +8,8 @@ template <class point> class Cloud
 {
    public:
       void remove(int index);
+      void remove(int, point &p, uchar &d);
+      void remove_last(int);
       void add(point, uchar);
       uchar get(point);
       point get(uchar);
@@ -19,6 +21,6 @@ template <class point> class Cloud
    private:
       std::vector<point> points;
       std::vector<uchar> descriptors;
-}
+};
 
 #endif
