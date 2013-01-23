@@ -27,7 +27,7 @@
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
 #define THRESHOLD 40
-#define VERBOSE true
+#define VERBOSE 1
 
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 
@@ -339,9 +339,9 @@ bool VisualOdometry::MainLoop() {
             return false;
         }
 
-        // Check correctness
-        if( cv::determinant(R1) < 0 ) R1 = -R1;
-        if( cv::determinant(R2) < 0 ) R2 = -R2;
+        // Check correctness(!(cv::Mat(visualOdometry->K).empty()))
+        if ( cv::determinant(R1) < 0 ) R1 = -R1;
+        if ( cv::determinant(R2) < 0 ) R2 = -R2;
 
         cv::Mat possible_projections[4];
         cv::hconcat( R1,  t, possible_projections[0] );
@@ -403,10 +403,15 @@ bool VisualOdometry::MainLoop() {
         //std::cout << "Scale : " << scale << std::endl;
 
         // TODO BE SMART
-        cv::Matx44d transformationMatrix( best_transform(0,0),best_transform(0,1),best_transform(0,2),best_transform(0,3),
-                                          best_transform(1,0),best_transform(1,1),best_transform(1,2),best_transform(1,3),
-                                          best_transform(2,0),best_transform(2,1),best_transform(2,2),best_transform(2,3),
-                                          0, 0, 0, 1 );
+        
+        //cv::Matx44d transformationMatrix( best_transform(0,0),best_transform(0,1),best_transform(0,2),best_transform(0,3),
+        //                                  best_transform(1,0),best_transform(1,1),best_transform(1,2),best_transform(1,3),
+        //                                  best_transform(2,0),best_transform(2,1),best_transform(2,2),best_transform(2,3),
+        //                                  0, 0, 0, 1 );
+        
+        cv::Matx44d transformationMatrix;
+        cv::vconcat( best_transform, cv::Matx31d( 0, 0, 0, 1 ), transformationMatrix );
+
         robotPosition = transformationMatrix * robotPosition;
         robotPosition(0,0) /= robotPosition(3,0);
         robotPosition(1,0) /= robotPosition(3,0);
@@ -428,21 +433,17 @@ bool VisualOdometry::MainLoop() {
 double VisualOdometry::solveScale(cv::Mat_<double> X, cv::Matx34d RTMatrix) {
 
     return 0.1;
-/**    cv::Mat_<double> A (2 * X.size().width, 1, CV_32F, 0.0f);
+
+    /**
+    cv::Mat_<double> A (2 * X.size().width, 1, CV_32F, 0.0f);
     cv::Mat_<double> b (2 * X.size().width, 1, CV_32F, 0.0f);
     cv::Point p;
 
-<<<<<<< HEAD
     cv::Matx13d r1 = (RTMatrix(0,0), RTMatrix(0,1), RTMatrix(0,2));
     cv::Matx13d r2 = (RTMatrix(1,0), RTMatrix(1,1), RTMatrix(1,2));
     cv::Matx13d r3 = (RTMatrix(2,0), RTMatrix(2,1), RTMatrix(2,2));
     cv::Mat<1,1,double> temp1;
     cv::Mat<1,1,double> temp2;
-=======
-            cv::subtract( r1, r3 * p.x, temp1 );
-            cv::subtract( r2, r3 * p.y, temp2 );
->>>>>>> 8653f27710f21d6c2eb47efaa12d3956e2a5a8b9
-
     cv::Matx31d point3D;
 
     double s_t_u = RTMatrix(0,3);
@@ -478,7 +479,8 @@ double VisualOdometry::solveScale(cv::Mat_<double> X, cv::Matx34d RTMatrix) {
 
     double s = ((cv::Mat)(A * b)).at<double>(0,0);
     std::cout << "Found scale difference: " << s << std::endl;
-**/}
+    **/
+}
 
 VisualOdometry::VisualOdometry(InputSource *source){
     this->inputSource = source;
