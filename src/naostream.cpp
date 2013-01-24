@@ -29,6 +29,12 @@
 #define THRESHOLD 0.5
 #define VERBOSE 0
 
+#define BRISK  0
+#define FREAK  1
+#define ORB    2
+
+#define _FEATURE BRISK
+
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 
 class VisualOdometry
@@ -225,8 +231,16 @@ bool VisualOdometry::MainLoop() {
     cv::Matx41d robotPosition (0.0, 0.0, 0.0, 1.0);
 
     // Create brisk detector
-    cv::BRISK brisk(60, 4, 1.0f);
-    brisk.create("BRISK");
+#if _FEATURE == BRISK
+    cv::BRISK features(60, 4, 1.0f);
+    features.create("BRISK");
+#elif _FEATURE == FREAK
+    cv::FREAK features();
+    features.create("FREAK");
+#elif _FEATURE == ORB
+    cv::ORB features();
+    features.create("ORB");
+#endif
 
     // Get the previous frame
     Frame current_frame;
@@ -234,8 +248,8 @@ bool VisualOdometry::MainLoop() {
     inputSource->getFrame( previous_frame );
 
     // Detect features for the firstm time
-    brisk.detect( previous_frame.img, previous_keypoints );    
-    brisk.compute( previous_frame.img, previous_keypoints, previous_descriptors );
+    features.detect( previous_frame.img, previous_keypoints );    
+    features.compute( previous_frame.img, previous_keypoints, previous_descriptors );
 
     // Ready matcher and corresponding iterator object
     cv::FlannBasedMatcher matcher( new cv::flann::LshIndexParams( 20, 10, 2 ) );
@@ -272,7 +286,7 @@ bool VisualOdometry::MainLoop() {
         }
 
         // Detect features
-        brisk.detect( current_frame.img, current_keypoints );
+        features.detect( current_frame.img, current_keypoints );
 
         // TODO : What if zero features found?
         if ( previous_keypoints.size() == 0 ) {
@@ -280,7 +294,7 @@ bool VisualOdometry::MainLoop() {
         }
 
         // Find descriptors for these features
-        brisk.compute( current_frame.img, current_keypoints, current_descriptors );
+        features.compute( current_frame.img, current_keypoints, current_descriptors );
 
 
 
