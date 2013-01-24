@@ -67,3 +67,30 @@ void Cloud<point>::get_frames(const std::vector<int> &fs)
 {
     fs = frames;
 }
+
+template <class point>
+void Cloud<point>::get(int frame,
+        typename std::vector<point>::iterator &p_begin,
+        typename std::vector<point>::iterator &p_end,
+        std::vector<uchar>::iterator &d_begin,
+        std::vector<uchar>::iterator &d_end)
+{
+   typename std::vector<point>::iterator f = frames.begin();
+   int i = 0;
+   for(; f != frames.end(); f++, i++) {
+      if (*f == frame) {
+         p_begin = points.begin() + i;
+         d_begin = descriptors.begin() + i;
+         break;
+      }
+   }
+   for(; f != frames.end(); f++, i++) {
+      if (*f != frame) {
+         p_end = points.begin() + i;
+         d_end = descriptors.begin() + i;
+         return;
+      }
+   }
+   p_end = points.end();
+   d_end = descriptors.end();
+}
