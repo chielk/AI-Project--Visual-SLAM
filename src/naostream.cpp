@@ -26,8 +26,8 @@
 
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
-#define THRESHOLD 0.5
-#define VERBOSE 0
+#define THRESHOLD 0.25
+#define VERBOSE 1
 
 #define BRISK  0
 #define FREAK  1
@@ -46,7 +46,7 @@ class VisualOdometry
     bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t );
     cv::Mat_<double> LinearLSTriangulation( cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2 );
     cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2);
-    double solveScale(std::vector<cv::Point2f> imagepoints_normalized,
+    double solveScale(KeyPointVector imagepoints,
                       std::vector<cv::Point3f> objectpoints_normalized,
                       cv::Matx34d RTMatrix);
     double determineFundamentalMatrix(std::vector<cv::Point2f> &current_points,
@@ -241,11 +241,18 @@ bool VisualOdometry::MainLoop() {
     cv::ORB features();
     features.create("ORB");
 #endif
+    ///
+    /// ORB(int nfeatures = 500, float scaleFactor = 1.2f, int nlevels = 8, int edgeThreshold = 31,
+    /// int firstLevel = 0, int WTA_K=2, int scoreType=ORB::HARRIS_SCORE, int patchSize=31 );
+    ///
 
     // Get the previous frame
     Frame current_frame;
     Frame previous_frame;
     inputSource->getFrame( previous_frame );
+
+    cv::Mat colorMat = previous_frame.img.clone();
+    cv::cvtColor(colorMat, previous_frame.img, CV_BGR2GRAY);
 
     // Detect features for the firstm time
     features.detect( previous_frame.img, previous_keypoints );    
@@ -285,6 +292,11 @@ bool VisualOdometry::MainLoop() {
             return false;
         }
 
+
+        // Convert to grayscale
+        cv::Mat colorMat = current_frame.img.clone();
+        cv::cvtColor(colorMat, current_frame.img, CV_BGR2GRAY);
+
         // Detect features
         features.detect( current_frame.img, current_keypoints );
 
@@ -295,8 +307,6 @@ bool VisualOdometry::MainLoop() {
 
         // Find descriptors for these features
         features.compute( current_frame.img, current_keypoints, current_descriptors );
-
-
 
         if (epnp)
         {
@@ -348,9 +358,6 @@ bool VisualOdometry::MainLoop() {
                                                           matches,
                                                           fundamental);
 
-
-            cv::Mat X ( 4, matches.size(), CV_64F, cv::Scalar( 1 ) );
-
             // If displacement is not sufficiently large, skip this image.
             if (mean_distance < THRESHOLD)
             {
@@ -392,7 +399,6 @@ bool VisualOdometry::MainLoop() {
                 P2 = possible_projections[i];
 
                 cv::Mat X ( 4, matches.size(), CV_64F, cv::Scalar( 1 ) );
-                int num_inliers = 0;
 
                 // TODO replace by iterator?
                 for ( int m = 0; m < (int) matches.size(); m++ ) {
@@ -516,6 +522,7 @@ bool VisualOdometry::MainLoop() {
             imwrite("some.png", img_matches);
 
             // If displacement is not sufficiently large, skip this image.
+            std::cout << mean_distance << std::endl;
             if (mean_distance < THRESHOLD)
             {
                 if (mean_distance < 0.00001)
@@ -530,6 +537,9 @@ bool VisualOdometry::MainLoop() {
             }
 
             // Compute essential matrix
+            cv::Matx33d K(750, 0,   320,
+                          0,   750, 240,
+                          0,   0,   1);
             cv::Matx33d E (cv::Mat(K.t() * F * K));
 
             // Estimation of projection matrix
@@ -547,6 +557,7 @@ bool VisualOdometry::MainLoop() {
             cv::hconcat( R1, -t, possible_projections[1] );
             cv::hconcat( R2,  t, possible_projections[2] );
             cv::hconcat( R2, -t, possible_projections[3] );
+            std::cout << R1 << "\n" <<  R2 << std::endl;
 
             // Construct matrix [I|0]
             cv::Matx34d P1( 1, 0, 0, 0,
@@ -579,7 +590,6 @@ bool VisualOdometry::MainLoop() {
                     cv::Matx31d X_a = IterativeLinearLSTriangulation(
                         previous_point_homogeneous,	P1,
                         current_point_homogeneous, P2 );
-
                     X.push_back( cv::Point3f( X_a(0), X_a(1), X_a(2) ));
 
                     if ( X_a(0) > 0 ) {
@@ -588,28 +598,36 @@ bool VisualOdometry::MainLoop() {
                 }
                 if ( num_inliers > max_inliers ) {
                     max_inliers = num_inliers;
+                    std::cout << P2 << "\nnum inliers;" << num_inliers <<std::endl;
 
                     // update best_X
                     best_X = X;
                     best_transform = cv::Mat(P2).clone();
                 }
             }
-    #if VERBOSE
-            //std::cout << best_X << std::endl;
+#if VERBOSE
+            for (int x  = 0 ; x < best_X.size(); x++) {
+                std::cout << best_X[x] << std::endl;
+            }
             std::cout << best_transform << "\n" << std::endl;
-    #endif
+#endif
 
             // SOLVE THEM SCALE ISSUES for m = 1;
-            double scale = solveScale(current_points_normalized, best_X, best_transform);
-            std::cout << "Scale current: " << scale << std::endl;
+            double scale1 = solveScale(current_keypoints, best_X, best_transform);
+            std::cout << "Scale current: " << scale1 << std::endl;
 
-            scale = solveScale(previous_points_normalized, best_X, best_transform);
-            std::cout << "Scale previous: " << scale << std::endl;
+            double scale2 = solveScale(previous_keypoints, best_X, best_transform);
+            std::cout << "Scale previous: " << scale2 << std::endl;
+
+            double scale = scale1 / scale2;
+            std::cout << "Scaled scale: " << scale << std::endl;
+
+            // TODO: scale translation
+            //5cv::Mat t = cv::Mat( best_transform ).col( 3 );
 
             // Update total points/cloud
             total_3D_pointcloud = best_X;
-            for (int matchnr = 0; matchnr < matches.size(); matchnr++)
-            {
+            for (int matchnr = 0; matchnr < matches.size(); matchnr++) {
                 total_3D_descriptors.push_back( current_descriptors.at<uchar>(matchnr) );
             }
 
@@ -633,26 +651,28 @@ bool VisualOdometry::MainLoop() {
 
             double roll, pitch, yaw;
             determineRollPitchYaw(roll, pitch, yaw, best_transform);
-            std::cout << "roll" << roll << "\n"
-                      << "pitch" << pitch << "\n"
-                      << "yaw" << yaw << std::endl;
+            //std::cout << "roll" << roll << "\n"
+            //          << "pitch" << pitch << "\n"
+            //          << "yaw" << yaw << std::endl;
 
             // Assign current values to the previous ones, for the next iteration
             previous_keypoints = current_keypoints;
             previous_frame = current_frame;
             previous_descriptors = current_descriptors;
+
+            std::cout << std::endl;
         }
     }
     // Main loop successful.
     return true;
 }
 
-double VisualOdometry::solveScale(std::vector<cv::Point2f> imagepoints_normalized,
+double VisualOdometry::solveScale(KeyPointVector imagepoints,
                                   std::vector<cv::Point3f> objectpoints_normalized,
                                   cv::Matx34d RTMatrix) {
 
-    cv::Mat A (2 * imagepoints_normalized.size(), 1, CV_32F, 0.0f);
-    cv::Mat b (2 * imagepoints_normalized.size(), 1, CV_32F, 0.0f);
+    cv::Mat A (2 * imagepoints.size(), 1, CV_32F, 0.0f);
+    cv::Mat b (2 * imagepoints.size(), 1, CV_32F, 0.0f);
 
     cv::Matx13f r1 (RTMatrix(0,0), RTMatrix(0,1), RTMatrix(0,2));
     cv::Matx13f r2 (RTMatrix(1,0), RTMatrix(1,1), RTMatrix(1,2));
@@ -668,9 +688,9 @@ double VisualOdometry::solveScale(std::vector<cv::Point2f> imagepoints_normalize
     cv::Point2f ip;
     cv::Point3f op;
 
-    for (int i=0; i < imagepoints_normalized.size(); i++ ) {
+    for (int i=0; i < imagepoints.size(); i++ ) {
 
-        ip = imagepoints_normalized[i];
+        ip = imagepoints[i].pt;
         op = objectpoints_normalized[i];
         cv::Matx31f objectpoint_mat( op.x, op.y, op.z );
 
