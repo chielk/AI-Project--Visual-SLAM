@@ -16,10 +16,11 @@ Cloud<point>::Cloud(std::vector<point> ps, std::vector<uchar> ds)
 }
 
 template <class point>
-void Cloud<point>::remove(int index, point &p, uchar &d)
+void Cloud<point>::remove(int index, point &p, uchar &d, int &f)
 {
    p = points.erase(points.begin()+index);
    d = descriptors.erase(descriptors.begin()+index);
+   f = frames.erase(frames.begin()+index);
 }
 
 template <class point>
@@ -27,13 +28,15 @@ void Cloud<point>::remove(int index)
 {
    points.erase(points.begin()+index);
    descriptors.erase(descriptors.begin()+index);
+   frames.erase(frames.begin()+index);
 }
 
 template <class point>
-void Cloud<point>::add(point p, uchar d)
+void Cloud<point>::add(point p, uchar d, int f)
 {
    points.push_back(p);
    descriptors.push_back(d);
+   frames.push_back(f);
 }
 
 template <class point>
@@ -44,4 +47,23 @@ void Cloud<point>::remove_last(int n)
    }
    points.erase(points.begin()+n);
    descriptors.erase(descriptors.begin()+n);
+   frames.erase(frames.begin()+n);
+}
+
+template <class point>
+void Cloud<point>::get_points(const std::vector<point> &pts)
+{
+    pts = points;
+}
+
+template <class point>
+void Cloud<point>::get_descriptors(const std::vector<uchar> &dscs)
+{
+    dscs = descriptors;
+}
+
+template <class point>
+void Cloud<point>::get_frames(const std::vector<int> &fs)
+{
+    fs = frames;
 }
