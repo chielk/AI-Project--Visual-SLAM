@@ -29,9 +29,9 @@
 #define THRESHOLD 0.25
 #define VERBOSE 1
 
-#define BRISK  0
-#define FREAK  1
-#define ORB    2
+#define _BRISK 0
+#define _FREAK 1
+#define _ORB   2
 
 #define _FEATURE BRISK
 
@@ -46,9 +46,7 @@ class VisualOdometry
     bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t );
     cv::Mat_<double> LinearLSTriangulation( cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2 );
     cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2);
-    double solveScale(KeyPointVector imagepoints,
-                      std::vector<cv::Point3f> objectpoints_normalized,
-                      cv::Matx34d RTMatrix);
+
     double determineFundamentalMatrix(std::vector<cv::Point2f> &current_points,
                                       std::vector<cv::Point2f> &previous_points,
                                       std::vector<cv::Point2f> &previous_points_inliers,
@@ -56,6 +54,10 @@ class VisualOdometry
                                       std::vector<cv::DMatch> &matches,
                                       cv::Matx33d &F);
     void determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix);
+
+    double findScaleLinear(cv::Matx34d &Pcam,
+                           cv::Mat &points3d,
+                           cv::Mat &points2d);
 public:
     VisualOdometry(InputSource *source);
     ~VisualOdometry();
@@ -231,13 +233,13 @@ bool VisualOdometry::MainLoop() {
     cv::Matx41d robotPosition (0.0, 0.0, 0.0, 1.0);
 
     // Create brisk detector
-#if _FEATURE == BRISK
+#if _FEATURE == _BRISK
     cv::BRISK features(60, 4, 1.0f);
     features.create("BRISK");
-#elif _FEATURE == FREAK
+#elif _FEATURE == _FREAK
     cv::FREAK features();
     features.create("FREAK");
-#elif _FEATURE == ORB
+#elif _FEATURE == _ORB
     cv::ORB features();
     features.create("ORB");
 #endif
@@ -580,10 +582,10 @@ bool VisualOdometry::MainLoop() {
                 // TODO replace by iterator?
                 for ( int m = 0; m < matches.size(); m++ ) {
 
-                    cv::Point3f current_point_homogeneous( current_keypoints[matches[m].queryIdx].pt.x,
+                    cv::Point3d current_point_homogeneous( current_keypoints[matches[m].queryIdx].pt.x,
                                                            current_keypoints[matches[m].queryIdx].pt.y,
                                                            1 );
-                    cv::Point3f previous_point_homogeneous( previous_keypoints[matches[m].trainIdx].pt.x,
+                    cv::Point3d previous_point_homogeneous( previous_keypoints[matches[m].trainIdx].pt.x,
                                                             previous_keypoints[matches[m].trainIdx].pt.y,
                                                             1 );
 
@@ -612,15 +614,40 @@ bool VisualOdometry::MainLoop() {
             std::cout << best_transform << "\n" << std::endl;
 #endif
 
+            /**
+             *  Input  - Pcam  -> (3x4) Camera position
+             *         - X3D   -> (3xn) 3D points
+             *         - Q     -> (2xn) Image points
+             *         - K     -> (3x3) Camera calibration
+             *
+             *  Output - scale -> (1x1) Scaling factor
+             *         - Pcam  -> (3x4) Scaled camera matrix
+             **/
             // SOLVE THEM SCALE ISSUES for m = 1;
-            double scale1 = solveScale(current_keypoints, best_X, best_transform);
+            cv::Mat imagepoints (2, best_X.size(), CV_64F);
+            cv::Mat objectpoints(3, best_X.size(), CV_64F);
+
+            for(int n = 0; n < best_X.size(); n++) {
+                imagepoints.at<double>(0, n) = current_keypoints[matches[n].queryIdx].pt.x;
+                imagepoints.at<double>(1, n) = current_keypoints[matches[n].queryIdx].pt.y;
+
+                cv::Point3d pt = best_X[n];
+                objectpoints.at<double>(0,n) = pt.x;
+                objectpoints.at<double>(1,n) = pt.y;
+                objectpoints.at<double>(2,n) = pt.z;
+            }
+
+            double scale1 = findScaleLinear(best_transform,
+                                            objectpoints,
+                                            imagepoints);
+
             std::cout << "Scale current: " << scale1 << std::endl;
 
-            double scale2 = solveScale(previous_keypoints, best_X, best_transform);
-            std::cout << "Scale previous: " << scale2 << std::endl;
+            //double scale2 = findScaleLinear(previous_keypoints, best_X, best_transform);
+            //std::cout << "Scale previous: " << scale2 << std::endl;
 
-            double scale = scale1 / scale2;
-            std::cout << "Scaled scale: " << scale << std::endl;
+            //double scale = scale1 / scale2;
+            //std::cout << "Scaled scale: " << scale << std::endl;
 
             // TODO: scale translation
             //5cv::Mat t = cv::Mat( best_transform ).col( 3 );
@@ -667,51 +694,99 @@ bool VisualOdometry::MainLoop() {
     return true;
 }
 
-double VisualOdometry::solveScale(KeyPointVector imagepoints,
-                                  std::vector<cv::Point3f> objectpoints_normalized,
-                                  cv::Matx34d RTMatrix) {
 
-    cv::Mat A (2 * imagepoints.size(), 1, CV_32F, 0.0f);
-    cv::Mat b (2 * imagepoints.size(), 1, CV_32F, 0.0f);
+/**
+ *  Input  - Pcam  -> (3x4) Camera position
+ *         - X3D   -> (3xn) 3D points
+ *         - Q     -> (2xn) Image points
+ *         - K     -> (3x3) Camera calibration
+ *
+ *  Output - scale -> (1x1) Scaling factor
+ *         - Pcam  -> (3x4) Scaled camera matrix
+ **/
+double VisualOdometry::findScaleLinear(cv::Matx34d &Pcam,
+                                       cv::Mat &points3d,
+                                       cv::Mat &points2d) {
 
-    cv::Matx13f r1 (RTMatrix(0,0), RTMatrix(0,1), RTMatrix(0,2));
-    cv::Matx13f r2 (RTMatrix(1,0), RTMatrix(1,1), RTMatrix(1,2));
-    cv::Matx13f r3 (RTMatrix(2,0), RTMatrix(2,1), RTMatrix(2,2));
-    cv::Mat temp1;
-    cv::Mat temp2;
+    // Make 2d points homogeneous
+    cv::Mat points2d_homogeneous;
+    cv::vconcat(points2d,
+                cv::Mat::ones(1, points2d.size().width, points2d.type()),
+                points2d_homogeneous);
 
-    double norm_t = cv::norm(RTMatrix.col(3));
-    cv::Matx31f t (RTMatrix(0,3) / norm_t,
-                   RTMatrix(1,3) / norm_t,
-                   RTMatrix(2,3) / norm_t);
+    // Make 3d points homogeneous
+    cv::Mat points3d_homogeneous;
+    cv::vconcat(points3d,
+                cv::Mat::ones(1, points3d.size().width, points3d.type()),
+                points3d_homogeneous);
 
-    cv::Point2f ip;
-    cv::Point3f op;
+    std::cout << points2d_homogeneous << std::endl;
 
-    for (int i=0; i < imagepoints.size(); i++ ) {
 
-        ip = imagepoints[i].pt;
-        op = objectpoints_normalized[i];
-        cv::Matx31f objectpoint_mat( op.x, op.y, op.z );
+    // Put 2d points in space K-1 x Q, form 3 x n matrix Qw
+    cv::Mat Qw = ((cv::Mat)K.inv()) * points2d_homogeneous;
 
-        cv::subtract(r1, r3 * ip.x, temp1);
-        cv::subtract(r2, r3 * ip.y, temp2);
+    // Project 3D points in image:
+    // 3xn = 3x4 * 4xn
+    cv::Mat Pw = ((cv::Mat)Pcam) * points3d_homogeneous;
+    Pw = ((cv::Mat)K) * Pw;
 
-        // Method 1
-        A.at<float>(i*2,1) = t(2) * ip.x - t(0);
-        b.at<float>(i*2,1) = ((cv::Mat)(temp1 * cv::Mat(objectpoint_mat))).at<float>(0,0);
-
-        // Method 2
-        A.at<float>(i*2+1,1) = t(2) * ip.y - t(1);
-        b.at<float>(i*2+1,1) = ((cv::Mat)(temp2 * cv::Mat(objectpoint_mat))).at<float>(0,0);
-
-        // Together, these comprise method 3
+    // Divide by homogeneous thingemajizz
+    for (int i = 0; i < Pw.size().width; i++) {
+        Pw.at<double>(0,i) / Pw.at<double>(3,i);
+        Pw.at<double>(1,i) / Pw.at<double>(3,i);
+        Pw.at<double>(2,i) / Pw.at<double>(3,i);
     }
-    A = (A.t() * A).inv() * A.t();
 
-    double s = ((cv::Mat)(A * b)).at<double>(0,0);
+    double scale;
 
-    return s;
+    // Build matrix A and vector b
+    cv::Mat_<double> A ( 2 * points2d.size().width, 1 );
+    cv::Mat_<double> b ( 2 * points2d.size().width, 1 );
+
+    cv::Matx13d r1( Pcam(0,0), Pcam(0,1), Pcam(0,2) );
+    cv::Matx13d r2( Pcam(1,0), Pcam(1,1), Pcam(1,2) );
+    cv::Matx13d r3( Pcam(2,0), Pcam(2,1), Pcam(2,2) );
+
+    cv::Matx23d r12;
+    cv::vconcat(r1,r2,r12);
+
+    cv::Matx21d tu (Pcam(0,3), Pcam(1,3));
+
+    cv::Matx21d temp1, temp2;
+
+    for (int i = 0; i < points3d.size().width; i++) {
+        //temp1 = ( Pcam(1:2,1:3) * X3D(1:3,i)  -
+        //         (Pcam(3,1:3) * X3D(1:3,i)) * Qw(1:2,i));
+        cv::Matx31d pointX (points3d.at<double>(0,i),
+                            points3d.at<double>(1,i),
+                            points3d.at<double>(2,i));
+        cv::Matx21d pointx (Qw.at<double>(0,i),
+                            Qw.at<double>(1,i));
+
+        cv::subtract( ((cv::Mat)r12) * (cv::Mat)pointX,
+                      (cv::Mat)pointx * ((cv::Mat)((cv::Mat)r3   * (cv::Mat)pointX)),
+                      temp1);
+
+        //temp2 = Pcam(3,4) * Qw(1:2,i) - Pcam(1:2,4);
+        cv::subtract( Pcam(2,3) * (cv::Mat)pointx, (cv::Mat)tu, temp2);
+
+        A.push_back((cv::Mat)temp2);
+        b.push_back((cv::Mat)temp1);
+    }
+    scale = (double)((cv::Mat)((cv::Mat(A.t() * A)) * A.t() *b)).at<double>(0,0);
+
+    /**%% METHOD 4
+         A = [];
+         b = [];
+         for (i=1:size(X3D,2))
+             A = [A;Pcam(2,4)*(Qw(1,i)/Qw(2,i))-Pcam(1,4);];
+             b = [b;(Pcam(1,1:3)-Pcam(2,1:3)*(Qw(1,i)/Qw(2,i)))*X3D(1:3,i)];
+         end;
+         scale4 = (A'*b)/(A'*A);
+    **/
+
+    return scale;
 }
 
 void VisualOdometry::determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix)
