@@ -44,7 +44,7 @@ Auke Wiggers\\6036163\\\url{A.J.Wiggers@uva.nl}}
 \includegraphics[width=\textwidth]{images/front.jpg}
 \end{figure*}
 
-\subsubsection*{A Artificial Intelligence project by Auke J. Wiggers, Camiel R. Verschoor,\\Chiel Kooijman and Steven Laan}
+\subsubsection*{An Artificial Intelligence project by Auke J. Wiggers, Camiel R. Verschoor,\\Chiel Kooijman and Steven Laan}
 \end{center}
 
 \newpage
@@ -75,10 +75,11 @@ In this section, the pipeline of our proposed system is described stepwise.
 \begin{figure}[!hb]
 \centerline{
 \xymatrix{
-Calibration\ar[rr] & & Feature\ Extraction \ar[rr] & & Feature\ Matching \ar[rr] & & 3D\ map\ reconstruction \ar[rr] 2D\ and\ 3D\ feature\ matching
-%User\ar[rr]^{Posts\ message\ on} & & Twitter \ar[dd]^{Message\ is\ extracted\ by}\\
-%& &\\
-%Recommendation \ar[uu]^{Play\ to} & & System \ar[ll]^{Provides}\\
+Calibration\ar[d]\\
+Egomotion\ar[d]\\
+Reconstruction\ar[d]\\
+Modelling\ar[d]\\
+Combining Visual Odometry
 }
 }
 \caption{Schematic overview of the pipeline of the system}
@@ -86,11 +87,55 @@ Calibration\ar[rr] & & Feature\ Extraction \ar[rr] & & Feature\ Matching \ar[rr]
 \end{figure}
 
 \subsection{Calibration}
-\subsection{Feature Extraction}
-\subsection{Feature Matching}
-\subsection{3D Map reconstruction}
-\subsection{2D feature and 3D feature Matching}
+Camera calibration is the process of estimating the intrinsic (and mostly the extrensic) parameters of the camera. Barrel distortion occurs in images taken the Nao robot's camera. Camera calibration allows the removal of this camera distortion.
+\par
+Description of method used for calibration.
 
+
+\subsection{Egomotion}
+Egomotion is the process of estimating a camera's motion relative to a rigid scene. There are two main approaches for estimating the relative motion between two frames, namely, Image-to-Image and Image-to-World.
+
+
+\subsubsection{Feature extraction}
+In this section, we concisely describe the feature extraction methods that were used in the system to extract features. In total three feature extractions methods were applied, namely, Binary Robust Invariant Scalable Keypoints (BRISK) \cite{Leutenegger2011}, Oriented FAST and Rotated BRIEF (ORB) \cite{Rublee2011} and Fast Retina Keypoints (FREAK) \cite{Ortiz2012}.
+
+\subsubsection*{Robust Invariant Scalable Keypoints}
+BRISK relies on an easily conﬁgurable circular sampling pattern from which it computes brightness comparisons to form a binary descriptor string. The unique properties, rotation and scale invariance, of BRISK can be useful for a wide spectrum of applications, in particular for tasks with hard real-time constraints or limited computation power: BRISK ﬁnally offers the quality of high-end features in such time-demanding applications.
+
+\subsubsection*{Oriented FAST and Rotated BRIEF}
+[Insert]
+\subsubsection*{Fast Retina Keypoint}
+[Insert]
+
+\subsubsection{Feature Matching}
+FLANN FEATUREMATCHER \cite{Muja2009}
+
+\subsubsection{Image-to-Image}
+- Match 2D with 2D descriptors.
+- Normalize matches.
+- Compute transformation matrices.
+- Scale points.
+- Find fundamental matrix and use RANSAC to reject outliers.
+- Compute essential matrix.
+- Estimation of projection matrix.
+- Decide on all candidates.
+
+\subsubsection{Image-to-World (PnP)}
+- Match 2D with 3D descriptors.
+- PNP Ransac.
+- Obtain rotation matrix from rotation vector.
+- Triangulate any unknown points.
+
+%\subsection{Refinement}
+% We do not do refinement as our camera matrix will not change as we do not zoom.
+
+\subsection{Reconstruction}
+The previously described methods estimate the motion of the camera and this pose estimation process yields the position of the different cameras in space. The matching obtained matching feature points across frames and then esitmate the 3-Dimensional (3D) position of those points in space. To obtain these 3D points there are at least two camera poses needed to estimate the spatial position.
+
+\subsection{Modelling}
+
+
+\subsection{Combining Visual Odometry}
 
 
 \section{Experimental Setup}
@@ -101,5 +146,7 @@ Calibration\ar[rr] & & Feature\ Extraction \ar[rr] & & Feature\ Matching \ar[rr]
 
 \section{Conclusion}
 
+\bibliographystyle{apalike}
+\bibliography{references}
 
 \end{document}
