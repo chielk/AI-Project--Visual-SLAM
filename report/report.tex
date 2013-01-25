@@ -73,21 +73,31 @@ Auke Wiggers\\6036163\\\url{A.J.Wiggers@uva.nl}}
 In this section, the pipeline of our proposed system is described stepwise.
 
 \begin{figure}[!hb]
-\centerline{
-\xymatrix{
-Calibration\ar[rr] & & Feature\ Extraction \ar[rr] & & Feature\ Matching \ar[rr] & & 3D\ map\ reconstruction \ar[rr] 2D\ and\ 3D\ feature\ matching
+%\centerline{
+%\xymatrix{
+%Calibration\ar[rr] & & Feature\ Extraction \ar[rr] & & Feature\ Matching \ar[rr] & & 3D\ map\ reconstruction \ar[rr] 2D\ and\ 3D\ feature\ matching
 %User\ar[rr]^{Posts\ message\ on} & & Twitter \ar[dd]^{Message\ is\ extracted\ by}\\
 %& &\\
 %Recommendation \ar[uu]^{Play\ to} & & System \ar[ll]^{Provides}\\
-}
-}
+%}
+%}
 \caption{Schematic overview of the pipeline of the system}
 \label{fig:system}
 \end{figure}
 
 \subsection{Calibration}
 \subsection{Feature Extraction}
+In this section, we concisely describe the feature extraction methods that were used in the system to extract features. In total three feature extractions methods were applied, namely, Binary Robust Invariant Scalable Keypoints (BRISK) \cite{Leutenegger2011}, Oriented FAST and Rotated BRIEF (ORB) \cite{Rublee2011} and Fast Retina Keypoints (FREAK) \cite{Ortiz2012}.
+
+\subsubsection{Binary Robust Invariant Scalable Keypoints}
+BRISK relies on an easily conﬁgurable circular sampling pattern from which it computes brightness comparisons to form a binary descriptor string. The unique properties, rotation and scale invariance, of BRISK can be useful for a wide spectrum of applications, in particular for tasks with hard real-time constraints or limited computation power: BRISK ﬁnally offers the quality of high-end features in such time-demanding applications.
+
+\subsubsection{Oriented FAST and Rotated BRIEF}
+[Insert]
+\subsubsection{Fast Retina Keypoint}
+[Insert]
 \subsection{Feature Matching}
+FLANN FEATUREMATCHER
 \subsection{3D Map reconstruction}
 \subsection{2D feature and 3D feature Matching}
 
@@ -101,5 +111,7 @@ Calibration\ar[rr] & & Feature\ Extraction \ar[rr] & & Feature\ Matching \ar[rr]
 
 \section{Conclusion}
 
+\bibliographystyle{apalike}
+\bibliography{references}
 
 \end{document}
