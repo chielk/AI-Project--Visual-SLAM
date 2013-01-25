@@ -5,6 +5,7 @@ project(src)
 
 # this lets you find the qibuild cmake framework
 find_package(qibuild)
+find_package(PCL 1.2 REQUIRED)
 
 # Here, we create an executable named "getimages" from the cpp file.
 
@@ -30,5 +31,5 @@ qi_create_bin(salvo ${_salvo_srcs})
 #
 # It automatically links with the corresponding libraries and make their headers
 # available.
-qi_use_lib(controller ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI OPENCV2_IMGPROC OPENCV2_calib3d)
+qi_use_lib(controller ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI OPENCV2_IMGPROC OPENCV2_calib3d )
 qi_use_lib(salvo ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI OPENCV2_IMGPROC OPENCV2_calib3d OPENCV2_features2d)
