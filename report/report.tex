@@ -2,6 +2,7 @@
 \usepackage[a4paper,pdftex]{geometry}
 \usepackage[english]{babel}
 \usepackage{amsmath,amsfonts}
+\usepackage[round]{natbib}
 \usepackage[pdftex]{graphicx}
 \usepackage{epstopdf}
 \usepackage{fancyhdr}
@@ -44,7 +45,8 @@ Auke Wiggers\\6036163\\\url{A.J.Wiggers@uva.nl}}
 \includegraphics[width=\textwidth]{images/front.jpg}
 \end{figure*}
 
-\subsubsection*{An Artificial Intelligence project by Auke J. Wiggers, Camiel R. Verschoor,\\Chiel Kooijman and Steven Laan}
+\subsubsection*{An Artificial Intelligence project by Auke J. Wiggers, Camiel
+R. Verschoor,\\Chiel Kooijman and Steven Laan}
 \end{center}
 
 \newpage
@@ -87,20 +89,52 @@ Combining Visual Odometry
 \end{figure}
 
 \subsection{Calibration}
-Camera calibration is the process of estimating the intrinsic (and mostly the extrensic) parameters of the camera. Barrel distortion occurs in images taken the Nao robot's camera. Camera calibration allows the removal of this camera distortion.
+Camera calibration is the process of estimating the intrinsic and extrinsic
+parameters of the camera. Images taken by the Nao robot's camera are subject to
+barrel distortion. Calibration provides us with camera parameters that allow us
+to transform images in a way that removes the distortion.
 \par
-Description of method used for calibration.
+To find the camera parameters we use the method proposed by
+\cite{zhang1999flexible} and implemented in the OpenCV library
+\citep{opencv_library}. In this method, a chessboard-like panel of which the
+dimensions are known, is held up in front of the camera in different positions.
+The algorithm uses the knowledge that the panel is planar to infer the camera
+parameters $f_x, f_y, c_x, c_y$ and distortion coefficients $?$, forming the
+camera matrix:
+$$
+F =
+\begin{bmatrix}
+	f_x	& 0		& c_x\\
+	0		& f_y		& c_y\\
+	0		& 0		& 1\\
+\end{bmatrix}
+$$
 
 
 \subsection{Egomotion}
-Egomotion is the process of estimating a camera's motion relative to a rigid scene. There are two main approaches for estimating the relative motion between two frames, namely, Image-to-Image and Image-to-World.
+Egomotion is the process of estimating a camera's motion relative to a rigid
+scene. There are two main approaches for estimating the relative motion between
+two frames, namely, Image-to-Image and Image-to-World. Image-to-Image uses two
+images to find a homography and reconstruct their positions in 3D through
+triangulation. With Image-to-World we mean matching points in an image to their
+known positions in 3D to infer the position of the camera relative to the world
+coordinates.
 
 
 \subsubsection{Feature extraction}
-In this section, we concisely describe the feature extraction methods that were used in the system to extract features. In total three feature extractions methods were applied, namely, Binary Robust Invariant Scalable Keypoints (BRISK) \cite{Leutenegger2011}, Oriented FAST and Rotated BRIEF (ORB) \cite{Rublee2011} and Fast Retina Keypoints (FREAK) \cite{Ortiz2012}.
+In this section, we concisely describe the feature extraction methods that were
+used in the system to extract features. In total three feature extractions
+methods were applied, namely, Binary Robust Invariant Scalable Keypoints
+(BRISK) \citep{Leutenegger2011}, Oriented FAST and Rotated BRIEF (ORB)
+\citep{Rublee2011} and Fast Retina Keypoints (FREAK) \citep{Ortiz2012}.
 
 \subsubsection*{Robust Invariant Scalable Keypoints}
-BRISK relies on an easily conﬁgurable circular sampling pattern from which it computes brightness comparisons to form a binary descriptor string. The unique properties, rotation and scale invariance, of BRISK can be useful for a wide spectrum of applications, in particular for tasks with hard real-time constraints or limited computation power: BRISK ﬁnally offers the quality of high-end features in such time-demanding applications.
+BRISK relies on an easily configurable circular sampling pattern from which it
+computes brightness comparisons to form a binary descriptor string. The unique
+properties, rotation and scale invariance, of BRISK can be useful for a wide
+spectrum of applications, in particular for tasks with hard real-time
+constraints or limited computation power: BRISK finally offers the quality of
+high-end features in such time-demanding applications.
 
 \subsubsection*{Oriented FAST and Rotated BRIEF}
 [Insert]
@@ -108,7 +142,7 @@ BRISK relies on an easily conﬁgurable circular sampling pattern from which it 
 [Insert]
 
 \subsubsection{Feature Matching}
-FLANN FEATUREMATCHER \cite{Muja2009}
+FLANN FEATUREMATCHER \citep{Muja2009}
 
 \subsubsection{Image-to-Image}
 - Match 2D with 2D descriptors.
@@ -127,10 +161,16 @@ FLANN FEATUREMATCHER \cite{Muja2009}
 - Triangulate any unknown points.
 
 %\subsection{Refinement}
-% We do not do refinement as our camera matrix will not change as we do not zoom.
+% We do not do refinement as our camera matrix will not change as we do not
+% zoom.
 
 \subsection{Reconstruction}
-The previously described methods estimate the motion of the camera and this pose estimation process yields the position of the different cameras in space. The matching obtained matching feature points across frames and then esitmate the 3-Dimensional (3D) position of those points in space. To obtain these 3D points there are at least two camera poses needed to estimate the spatial position.
+The previously described methods estimate the motion of the camera and this
+pose estimation process yields the position of the different cameras in space.
+The matching obtained matching feature points across frames and then estimate
+the 3-Dimensional (3D) position of those points in space. To obtain these 3D
+points there are at least two camera poses needed to estimate the spatial
+position.
 
 \subsection{Modelling}
 
@@ -146,7 +186,8 @@ The previously described methods estimate the motion of the camera and this pose
 
 \section{Conclusion}
 
-\bibliographystyle{apalike}
+\bibliographystyle{plainnat}
 \bibliography{references}
 
 \end{document}
+% vim: set spell : spelllang=en_gb :

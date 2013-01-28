@@ -20,3 +20,14 @@ image/odometry.txt
 
 # QI-created files
 src/build*
+
+# Compiled tex files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
+
