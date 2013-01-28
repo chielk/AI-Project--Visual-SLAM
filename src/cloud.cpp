@@ -1,11 +1,10 @@
 #include "cloud.hpp"
 
-
 template <class point>
 Cloud<point>::Cloud()
 {
-   points = std::vector<point>();
-   descriptors = std::vector<point>();
+//   points = std::vector<point>();
+//   descriptors = std::vector<point>();
 }
 
 template <class point>
@@ -59,19 +58,19 @@ void Cloud<point>::remove_last(int n)
 }
 
 template <class point>
-void Cloud<point>::get_points(const std::vector<point> &pts)
+void Cloud<point>::get_points(std::vector<point> &pts)
 {
     pts = points;
 }
 
 template <class point>
-void Cloud<point>::get_descriptors(const std::vector<uchar> &dscs)
+void Cloud<point>::get_descriptors(std::vector<uchar> &dscs)
 {
     dscs = descriptors;
 }
 
 template <class point>
-void Cloud<point>::get_frames(const std::vector<int> &fs)
+void Cloud<point>::get_frames(std::vector<int> &fs)
 {
     fs = frames;
 }
@@ -101,4 +100,10 @@ void Cloud<point>::get(int frame,
    }
    p_end = points.end();
    d_end = descriptors.end();
+}
+
+template <class point>
+Cloud<point>::~Cloud()
+{
+
 }
