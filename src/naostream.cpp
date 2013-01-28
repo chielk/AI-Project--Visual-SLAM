@@ -866,8 +866,8 @@ double VisualOdometry::distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2
         return sqrt( temp_shift.ddot( temp_shift ) );
     default:
         return 0.0;
+    }
 }
-
 
 int main( int argc, char* argv[] ) {
     if ( argc < 3 ) {
