@@ -40,6 +40,14 @@ void Cloud<point>::add(point p, uchar d, int f)
 }
 
 template <class point>
+void Cloud<point>::add(std::vector<point> pts, std::vector<uchar> dscs, std::vector<int> fs)
+{
+   points.insert(points.end(), pts.begin(), pts.end());
+   descriptors.insert(descriptors.end(), dscs.begin(), dscs.end());
+   frames.insert(frames.end(), fs.begin(), fs.end());
+}
+
+template <class point>
 void Cloud<point>::remove_last(int n)
 {
    if (n <= 0) {
