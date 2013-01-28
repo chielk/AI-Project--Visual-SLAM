@@ -147,8 +147,15 @@ camera relative to the world coordinates.
 
 
 \subsubsection{Feature extraction}
-In order to create a homography between two images, or match points of an image
-to a corresponding point in a 3D model, we 
+In order to create a homography between two images (Image-to-Image), or match
+points of an image to a corresponding point in a 3D model (Image-to-World), we
+need to recognise and match these points in different images. The descriptions
+to match points (known as features or descriptors) need to be strict so that it
+does not match wrong pairs, but also tolerant so that it will still match
+points when conditions change. These conditions may include change of light,
+change of camera position (which can result in scaling or rotation), and motion
+blur. Finding descriptors also needs to be fast, so that it can be computed in
+runtime.
 
 In this section, we concisely describe the feature extraction methods that were
 used in the system to extract features. In total three feature extractions
