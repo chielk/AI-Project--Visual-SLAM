@@ -24,6 +24,27 @@
 #include <time.h>
 #include "inputsource.hpp"
 
+#define VISUALIZE 1
+#if VISUALIZE
+#include "pcl/visualization/cloud_viewer.h"
+
+void vec2cloud(std::vector<cv::Point3d> point_vector, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
+    cloud->width  = 1;
+    cloud->height = point_vector.size();
+    cloud->points.resize( cloud->height );
+
+    cv::Point3d pt;
+    for(int i = 0; i != cloud->height; i++) {
+        pt = point_vector[i];
+
+        cloud->points[i].x = pt.x;
+        cloud->points[i].y = pt.y;
+        cloud->points[i].z = pt.z;
+    }
+}
+#endif
+
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
 #define THRESHOLD 0.20
@@ -33,7 +54,7 @@
 #define _FREAK 1
 #define _ORB   2
 
-#define _FEATURE BRISK
+#define _FEATURE _BRISK
 
 enum DMMethod { 
     TS_MS, // Total Shift - Mean Shift
@@ -301,10 +322,10 @@ bool VisualOdometry::MainLoop() {
     cv::BRISK features(60, 4, 1.0f);
     features.create("BRISK");
 #elif _FEATURE == _FREAK
-    cv::FREAK features();
+    cv::FREAK features(60, 4, 1.0f);
     features.create("FREAK");
 #elif _FEATURE == _ORB
-    cv::ORB features();
+    cv::ORB features(60, 4, 1.0f);
     features.create("ORB");
 #endif
     ///
@@ -345,8 +366,9 @@ bool VisualOdometry::MainLoop() {
     // Ready for construction of matrix [R|t]
     cv::Matx34d P2;
 
-
-
+#if VISUALIZE
+    pcl::visualization::CloudViewer viewer("Cloudviewer");
+#endif
     while ( (char) cv::waitKey( 30 ) == -1 ) {
         // Retrieve an image
         if ( !inputSource->getFrame( current_frame ) ) {
@@ -587,14 +609,16 @@ bool VisualOdometry::MainLoop() {
 
             FindBestRandT(previous_keypoints, current_keypoints, matches, R1, R2, t, best_X, best_transform);
 
-//#if VERBOSE
+#if 1//VERBOSE
             std::cout << "Best found transformation\n" << best_transform << "\n" << std::endl;
-//#endif
-                //// Display found points
-                //pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
-                //mat2cloud(best_X, cloud);
-                //viewer.showCloud(cloud);
-
+#endif
+#if VISUALIZE
+            // Display found points
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+            vec2cloud(best_X, cloud);
+            viewer.showCloud(cloud);
+            sleep(20);
+#endif
 #if VERBOSE
             for ( size_t x  = 0; x < best_X.size().height; x++ ) {
                 std::cout << best_X[x] << std::endl;
@@ -926,7 +950,7 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
 
         X.clear();
         P2 = possible_projections[i];
-#if 0
+#if 1
         // TODO replace by iterator?
         for ( size_t m = 0; m < matches.size(); m++ ) {
 
@@ -943,7 +967,7 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
             current_point_homogeneous.y = k_current_point(1);
             current_point_homogeneous.z = k_current_point(2);
 
-            cv::Matx31d k_previous_point( (cv::Mat)( Kinv * cv::Mat( previous_point_homogeneous )));
+            cv::Matx31d k_previous_point( (cv::Mat)(Kinv * cv::Mat( previous_point_homogeneous )));
             previous_point_homogeneous.x = k_previous_point(0);
             previous_point_homogeneous.y = k_previous_point(1);
             previous_point_homogeneous.z = k_previous_point(2);
@@ -984,19 +1008,3 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
         }
     }
 }
-
-
-/**
-void mat2cloud(cv::Mat points, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
-{
-    cloud->width  = 1;
-    cloud->height = points.cols;
-    cloud->points.resize( cloud->height );
-
-    for(int i = 0; i != cloud->height; i++) {
-        cloud->points[i].x = points.at<float>(0, i);
-        cloud->points[i].y = points.at<float>(1, i);
-        cloud->points[i].z = points.at<float>(2, i);
-    }
-}
-**/

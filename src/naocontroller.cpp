@@ -323,7 +323,7 @@ void NaoController::sweep()
     odometryFile.open("images/odometry.txt");
 
     AL::ALValue headYawName = "HeadYaw";
-    AL::ALValue headYawAngles =  AL::ALValue::array(-0.3f, 0.3f);
+    AL::ALValue headYawAngles =  AL::ALValue::array(-0.0f, 0.0f);
     AL::ALValue headYawTimes =  AL::ALValue::array(5, 10);
     motProxy->post.angleInterpolation(headYawName, headYawAngles, headYawTimes, true);
     Frame frame;
