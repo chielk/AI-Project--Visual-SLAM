@@ -43,9 +43,10 @@ class VisualOdometry
     cv::Matx33d K;
     cv::Mat distortionCoeffs;
 
-    bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t );
+
     cv::Mat_<double> LinearLSTriangulation( cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2 );
     cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2);
+    double TestTriangulation(std::vector<cv::Point3d> &pcloud_pt3d, cv::Matx34d &P);
 
     double determineFundamentalMatrix(std::vector<cv::Point2f> &current_points,
                                       std::vector<cv::Point2f> &previous_points,
@@ -53,11 +54,17 @@ class VisualOdometry
                                       std::vector<cv::Point2f> &current_points_inliers,
                                       std::vector<cv::DMatch> &matches,
                                       cv::Matx33d &F);
+
+    bool GetCameraMatrixHorn( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t );
+    bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t );
+    void FindBestRandT(KeyPointVector &previous_keypoints, KeyPointVector &current_keypoints, std::vector<cv::DMatch> &matches,
+                       cv::Mat &R1, cv::Mat &R2, cv::Mat &t, std::vector<cv::Point3d> &best_X, cv::Matx34d &best_transform);
+
+
     void determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix);
 
-    double findScaleLinear(cv::Matx34d &Pcam,
-                           cv::Mat &points3d,
-                           cv::Mat &points2d);
+    double findScaleLinear(cv::Matx34d &Pcam, cv::Mat &points3d, cv::Mat &points2d);
+
 public:
     VisualOdometry(InputSource *source);
     ~VisualOdometry();
@@ -110,6 +117,58 @@ double VisualOdometry::determineFundamentalMatrix(std::vector<cv::Point2f> &prev
     // Distance calculation
     mean_distance /= (double)matches.size();
     return mean_distance;
+}
+
+
+bool VisualOdometry::GetCameraMatrixHorn( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t )
+{
+    cv::Mat EtimesEtransposed = (cv::Mat)E * (cv::Mat)E.t();
+    cv::Matx33d TTsquared;
+
+    double trace = EtimesEtransposed.at<double>(0,0) +
+                   EtimesEtransposed.at<double>(1,1) +
+                   EtimesEtransposed.at<double>(2,2);
+
+    cv::subtract( (cv::Mat) cv::Mat::eye(3,3,CV_64F) * trace * 0.5,
+                  (cv::Mat)EtimesEtransposed,
+                  TTsquared );
+
+    // Three possible solutions, column with largest diagonal value is safest
+    if (TTsquared(0,0) > TTsquared(1,1) && TTsquared(0,0) > TTsquared(2,2)) {
+        t = (cv::Mat)TTsquared.col(0) / sqrt(TTsquared(0,0));
+    } else if (TTsquared(1,1) > TTsquared(2,2)) {
+        t = (cv::Mat)TTsquared.col(1) / sqrt(TTsquared(1,1));
+    } else {
+        t = (cv::Mat)TTsquared.col(2) / sqrt(TTsquared(2,2));
+    }
+
+    std::cout << t << std::endl;
+
+    // Determine rotationmatrix in multiple steps
+    // 1. Calculate cofactor of E
+    cv::Mat e1 (E.col(0));
+    cv::Mat e2 (E.col(1));
+    cv::Mat e3 (E.col(2));    
+    cv::Matx31d c12 = e1.cross(e2);
+    cv::Matx31d c23 = e2.cross(e3);
+    cv::Matx31d c31 = e3.cross(e1);
+
+    cv::Matx33d cofactor_E( c23(0), c31(0), c12(0),
+                            c23(1), c31(1), c12(1),
+                            c23(2), c31(2), c12(2) );
+
+    // 2. Construct skew symmetric of translation vector
+    cv::Matx33d t_skewed ( 0,               -t.at<double>(2),  t.at<double>(1),
+                           t.at<double>(2),  0              , -t.at<double>(0),
+                          -t.at<double>(1),  t.at<double>(0),  0 );
+
+    subtract( (cv::Mat)cofactor_E.t(), (cv::Mat)( (cv::Mat)t_skewed * (cv::Mat)E), R1);
+    R1 /= ((cv::Mat)(t.t() * t)).at<double>(0,0);
+
+    subtract( (cv::Mat)cofactor_E.t(), (cv::Mat)(-(cv::Mat)t_skewed * (cv::Mat)E), R2);
+    R2 /= ((cv::Mat)(-t.t() * -t)).at<double>(0,0);
+
+    return true;
 }
 
 bool VisualOdometry::DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t ) {
@@ -269,7 +328,7 @@ bool VisualOdometry::MainLoop() {
 
 
     // Storage for 3d points and corresponding descriptors
-    std::vector<cv::Point3f> total_3D_pointcloud;
+    std::vector<cv::Point3d> total_3D_pointcloud;
     KeyPointVector total_2D_keypoints;
     cv::Mat total_3D_descriptors;
     cv::Mat total_2D_descriptors;
@@ -387,40 +446,6 @@ bool VisualOdometry::MainLoop() {
             if ( cv::determinant(R1) < 0 ) R1 = -R1;
             if ( cv::determinant(R2) < 0 ) R2 = -R2;
 
-            cv::Mat possible_projections[4];
-            cv::hconcat( R1,  t, possible_projections[0] );
-            cv::hconcat( R1, -t, possible_projections[1] );
-            cv::hconcat( R2,  t, possible_projections[2] );
-            cv::hconcat( R2, -t, possible_projections[3] );
-
-            cv::Mat best_X ( 4, matches.size(), CV_64F );
-            cv::Matx34d best_transform;
-
-            // Loop over possible candidates
-            for ( int i = 0 ; i < 4; i++ ) {
-                P2 = possible_projections[i];                
-
-                cv::Mat X ( 4, matches.size(), CV_64F, cv::Scalar( 1 ) );
-
-                // TODO replace by iterator?
-                for ( int m = 0; m < (int) matches.size(); m++ ) {
-
-                    cv::Point3f previous_point_homogeneous( previous_points_inliers[m].x,
-                                                            previous_points_inliers[m].y,
-                                                            1 );
-                    cv::Point3f current_point_homogeneous( current_points_inliers[m].x,
-                                                           current_points_inliers[m].y,
-                                                           1 );
-
-                    cv::Matx31d X_a = IterativeLinearLSTriangulation(
-                        previous_point_homogeneous,	P1,
-                        current_point_homogeneous, P2 );
-
-                    X.at<double>(0,m) = X_a(0);
-                    X.at<double>(1,m) = X_a(1);
-                    X.at<double>(2,m) = X_a(2);
-                }
-            }
 
        // Add to all_descriptors and 3d point cloud
 
@@ -543,7 +568,7 @@ bool VisualOdometry::MainLoop() {
 
             // Estimation of projection matrix
             cv::Mat R1, R2, t;
-            if( !DecomposeEtoRandT( E, R1, R2, t ) ) {
+            if( !GetCameraMatrixHorn( E, R1, R2, t ) ) {
                 return false;
             }
 
@@ -551,79 +576,19 @@ bool VisualOdometry::MainLoop() {
             if ( cv::determinant(R1) < 0 ) R1 = -R1;
             if ( cv::determinant(R2) < 0 ) R2 = -R2;
 
-            cv::Mat possible_projections[4];
-            cv::hconcat( R1,  t, possible_projections[0] );
-            cv::hconcat( R1, -t, possible_projections[1] );
-            cv::hconcat( R2,  t, possible_projections[2] );
-            cv::hconcat( R2, -t, possible_projections[3] );
-
-            // Construct matrix [I|0]
-            cv::Matx34d P1( 1, 0, 0, 0,
-                            0, 1, 0, 0,
-                            0, 0, 1, 0 );
-            cv::Matx34d P2;
-
-            int max_inliers = 0;
-            std::vector<cv::Point3f> best_X;
+            std::vector<cv::Point3d> best_X;
             cv::Matx34d best_transform;
 
-            cv::Mat Kinv = (cv::Mat)K.inv();
+            FindBestRandT(previous_keypoints, current_keypoints, matches, R1, R2, t, best_X, best_transform);
 
-            // Loop over possible candidates
-            for ( int i = 0 ; i < 4; i++ ) {
-                P2 = possible_projections[i];
-                std::vector<cv::Point3f> X;
-
-                int num_inliers = 0;
-
-                // TODO replace by iterator?
-                for ( size_t m = 0; m < matches.size(); m++ ) {
-
-                    cv::Point3d current_point_homogeneous( current_keypoints[matches[m].queryIdx].pt.x,
-                                                           current_keypoints[matches[m].queryIdx].pt.y,
-                                                           1 );
-                    cv::Point3d previous_point_homogeneous( previous_keypoints[matches[m].trainIdx].pt.x,
-                                                            previous_keypoints[matches[m].trainIdx].pt.y,
-                                                            1 );
-
-                    cv::Matx31d k_current_point ( (cv::Mat)(Kinv * cv::Mat( current_point_homogeneous )));
-                    current_point_homogeneous.x = k_current_point(0);
-                    current_point_homogeneous.y = k_current_point(1);
-                    current_point_homogeneous.z = k_current_point(2);
-
-                    cv::Matx31d k_previous_point( (cv::Mat)( Kinv * cv::Mat( previous_point_homogeneous )));
-                    previous_point_homogeneous.x = k_previous_point(0);
-                    previous_point_homogeneous.y = k_previous_point(1);
-                    previous_point_homogeneous.z = k_previous_point(2);
-
-                    cv::Matx31d X_a = IterativeLinearLSTriangulation(
-                        previous_point_homogeneous,	P1,
-                        current_point_homogeneous, P2 );
-                    X.push_back( cv::Point3d( X_a(0), X_a(1), X_a(2) ));
-
-                    //std::cout << "Point3d:" << X_a << std::endl;
-
-                    if ( X_a(2) > 0 ) {
-                        num_inliers++;
-                    }
-                }
-
-                if ( num_inliers > max_inliers ) {
-                    max_inliers = num_inliers;
-                    // update best_X
-                    best_X = X;
-                    best_transform = cv::Mat(P2).clone();
-                }
 
                 //// Display found points
                 //pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
                 //mat2cloud(best_X, cloud);
                 //viewer.showCloud(cloud);
 
-
-            }
 #if VERBOSE
-            for ( size_t x  = 0; x < best_X.size(); x++ ) {
+            for ( size_t x  = 0; x < best_X.size().height; x++ ) {
                 std::cout << best_X[x] << std::endl;
             }
 #endif
@@ -708,6 +673,30 @@ bool VisualOdometry::MainLoop() {
     return true;
 }
 
+double VisualOdometry::TestTriangulation(std::vector<cv::Point3d> &pcloud_pt3d, cv::Matx34d &P) {
+    std::vector<uchar> status;
+    std::vector<cv::Point3d> pcloud_pt3d_projected(pcloud_pt3d.size());
+
+    cv::Matx44d P4x4 = cv::Matx44d::eye();
+    for(int i = 0; i < 12; i++) {
+        P4x4.val[i] = P.val[i];
+    }
+
+    cv::perspectiveTransform(pcloud_pt3d, pcloud_pt3d_projected, P4x4);
+
+    status.resize(pcloud_pt3d.size(),0);
+    for (int i=0; i<pcloud_pt3d.size(); i++) {
+        status[i] = (pcloud_pt3d_projected[i].z > 0) ? 1 : 0;
+    }
+    int count = cv::countNonZero(status);
+
+    double percentage = ((double)count / (double)pcloud_pt3d.size());
+//#if VERBOSE
+    std::cout << count << "/" << pcloud_pt3d.size() << " = " << percentage*100.0 << "% are in front of camera" << std::endl;
+//#endif
+    return percentage;
+
+}
 
 /**
  *  Input  - Pcam  -> (3x4) Camera position
@@ -871,6 +860,82 @@ int main( int argc, char* argv[] ) {
     if (visualOdometry->validConfig)
     {
         visualOdometry->MainLoop();
+    }
+}
+
+/**
+  * Find best transformation matrix best_transform, with corresponding triangulationpoints best_X, based
+  * on candidates R1,R2 and t, and the points in the image that were not rejected by RANSAC.
+  */
+void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointVector &current_keypoints,
+                                   std::vector<cv::DMatch> &matches, cv::Mat &R1, cv::Mat &R2,
+                                   cv::Mat &t, std::vector<cv::Point3d> &best_X, cv::Matx34d &best_transform)
+{
+    cv::Mat possible_projections[4];
+    cv::hconcat( R1,  t, possible_projections[0] );
+    cv::hconcat( R1, -t, possible_projections[1] );
+    cv::hconcat( R2,  t, possible_projections[2] );
+    cv::hconcat( R2, -t, possible_projections[3] );
+
+    // Construct matrix [I|0]
+    cv::Matx34d P1( 1, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0, 1, 0 );
+    cv::Matx34d P2;
+
+    double best_percentage1 = 0.0;
+    double best_percentage2 = 0.0;
+    cv::Mat Kinv = (cv::Mat)K.inv();
+    std::vector<cv::Point3d> X1, X2;
+
+    // Loop over possible candidates
+    for ( int i = 0 ; i < 4; i++ ) {
+
+        X1.clear(); X2.clear();
+        P2 = possible_projections[i];
+
+        // TODO replace by iterator?
+        for ( size_t m = 0; m < matches.size(); m++ ) {
+
+            cv::Point3d current_point_homogeneous( current_keypoints[matches[m].queryIdx].pt.x,
+                                                   current_keypoints[matches[m].queryIdx].pt.y,
+                                                   1 );
+            cv::Point3d previous_point_homogeneous( previous_keypoints[matches[m].trainIdx].pt.x,
+                                                    previous_keypoints[matches[m].trainIdx].pt.y,
+                                                    1 );
+
+            cv::Matx31d k_current_point ( (cv::Mat)(Kinv * cv::Mat( current_point_homogeneous )));
+            current_point_homogeneous.x = k_current_point(0);
+            current_point_homogeneous.y = k_current_point(1);
+            current_point_homogeneous.z = k_current_point(2);
+
+            cv::Matx31d k_previous_point( (cv::Mat)( Kinv * cv::Mat( previous_point_homogeneous )));
+            previous_point_homogeneous.x = k_previous_point(0);
+            previous_point_homogeneous.y = k_previous_point(1);
+            previous_point_homogeneous.z = k_previous_point(2);
+
+            cv::Matx31d X_a = IterativeLinearLSTriangulation(
+                previous_point_homogeneous,	P1,
+                current_point_homogeneous, P2 );
+
+            cv::Matx31d X_b = IterativeLinearLSTriangulation(
+                previous_point_homogeneous,	P2,
+                current_point_homogeneous, P1 );
+
+            X1.push_back( cv::Point3d( X_a(0), X_a(1), X_a(2) ));
+            X2.push_back( cv::Point3d( X_b(0), X_b(1), X_b(2) ));
+        }
+
+        double percentage1 = TestTriangulation(X1, P2);
+        double percentage2 = TestTriangulation(X2, P2);
+
+        if ( percentage1 > 0.75 && percentage2 > 0.75 ) {
+            // update best values-so-far
+            best_percentage1 = percentage1;
+            best_percentage2 = percentage2;
+            best_X = X1;
+            best_transform = cv::Mat(P2).clone();
+        }
     }
 }
 
