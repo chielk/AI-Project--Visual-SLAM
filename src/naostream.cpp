@@ -35,6 +35,11 @@
 
 #define _FEATURE BRISK
 
+enum DMMethod { 
+    TS_MS, // Total Shift - Mean Shift
+    MEAN_SHIFT,
+    TOTAL_SHIFT
+};
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 
 class VisualOdometry
@@ -62,7 +67,7 @@ class VisualOdometry
 
 
     void determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix);
-    double distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2, int method );
+    double distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2, DMMethod method );
     double findScaleLinear(cv::Matx34d &Pcam, cv::Mat &points3d, cv::Mat &points2d);
 
 public:
@@ -834,12 +839,9 @@ VisualOdometry::VisualOdometry(InputSource *source){
 VisualOdometry::~VisualOdometry(){
     delete this->inputSource;
 }
-// TODO: make enum
-#define MEAN_SHIFT 0
-double VisualOdometry::distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2, int method = MEAN_SHIFT ) {
+
+double VisualOdometry::distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2, DMMethod method = MEAN_SHIFT ) {
     assert( kpv1.size() == kpv2.size() );
-    switch ( method ) {
-    case MEAN_SHIFT:
         cv::Point2d mean_shift( 0, 0 );
         cv::Point2d total_shift( 0, 0 );
         cv::Point2d temp_shift;
@@ -848,6 +850,12 @@ double VisualOdometry::distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2
             total_shift += cv::Point2d( abs( temp_shift.x ), abs( temp_shift.y ) );
             mean_shift += temp_shift;
         }
+    switch ( method ) {
+    case TOTAL_SHIFT:
+        return sqrt( total_shift.ddot( total_shift ) );
+    case MEAN_SHIFT:
+        return sqrt( mean_shift.ddot( mean_shift ) );
+    case TS_MS:
         temp_shift = total_shift - mean_shift; //cv::Point2d (mean_shift.x / total_shift.x, mean_shift.y / total_shift.y );
         return sqrt( temp_shift.ddot( temp_shift ) );
     default:
