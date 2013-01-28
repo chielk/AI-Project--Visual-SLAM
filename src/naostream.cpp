@@ -579,9 +579,12 @@ bool VisualOdometry::MainLoop() {
             std::vector<cv::Point3d> best_X;
             cv::Matx34d best_transform;
 
+
             FindBestRandT(previous_keypoints, current_keypoints, matches, R1, R2, t, best_X, best_transform);
 
-
+//#if VERBOSE
+            std::cout << "Best found transformation\n" << best_transform << "\n" << std::endl;
+//#endif
                 //// Display found points
                 //pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
                 //mat2cloud(best_X, cloud);
@@ -623,6 +626,7 @@ bool VisualOdometry::MainLoop() {
             best_transform(1,3) /= norm_t;
             best_transform(2,3) /= norm_t;
 
+            std::cout << best_transform << std::endl;
             double scale1 = findScaleLinear(best_transform,
                                             objectpoints,
                                             imagepoints);
@@ -771,8 +775,10 @@ double VisualOdometry::findScaleLinear(cv::Matx34d &Pcam,
         //temp2 = Pcam(3,4) * Qw(1:2,i) - Pcam(1:2,4);
         cv::subtract( Pcam(2,3) * (cv::Mat)pointx, (cv::Mat)tu, temp2);
 
-        A.push_back((cv::Mat)temp2);
-        b.push_back((cv::Mat)temp1);
+        A.at<double>(i*2,   0) = temp2(0);
+        A.at<double>(i*2+1, 0) = temp2(1);
+        b.at<double>(i*2,   0) = temp1(0);
+        b.at<double>(i*2+1, 0) = temp1(1);
     }
     scale = (double)((cv::Mat)((cv::Mat(A.t() * A)) * A.t() *b)).at<double>(0,0);
 
@@ -883,19 +889,20 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
                     0, 0, 1, 0 );
     cv::Matx34d P2;
 
-    double best_percentage1 = 0.0;
-    double best_percentage2 = 0.0;
+    double best_percentage = 0.0;
+
     cv::Mat Kinv = (cv::Mat)K.inv();
-    std::vector<cv::Point3d> X1, X2;
+    std::vector<cv::Point3d> X;
 
     // Loop over possible candidates
     for ( int i = 0 ; i < 4; i++ ) {
 
-        X1.clear(); X2.clear();
+        X.clear();
         P2 = possible_projections[i];
-
+#if 0
         // TODO replace by iterator?
         for ( size_t m = 0; m < matches.size(); m++ ) {
+
 
             cv::Point3d current_point_homogeneous( current_keypoints[matches[m].queryIdx].pt.x,
                                                    current_keypoints[matches[m].queryIdx].pt.y,
@@ -918,22 +925,34 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
                 previous_point_homogeneous,	P1,
                 current_point_homogeneous, P2 );
 
-            cv::Matx31d X_b = IterativeLinearLSTriangulation(
-                previous_point_homogeneous,	P2,
-                current_point_homogeneous, P1 );
-
-            X1.push_back( cv::Point3d( X_a(0), X_a(1), X_a(2) ));
-            X2.push_back( cv::Point3d( X_b(0), X_b(1), X_b(2) ));
+            X.push_back( cv::Point3d( X_a(0), X_a(1), X_a(2) ));
+        }
+#else
+        // Use opencvs triangulation method
+        std::vector<cv::Point2d> cpoints, ppoints;
+        for ( size_t m = 0; m < matches.size(); m++ ) {
+            cpoints.push_back( cv::Point2d ( current_keypoints[matches[m].queryIdx].pt.x,
+                                             current_keypoints[matches[m].queryIdx].pt.y ) );
+            ppoints.push_back( cv::Point2d ( previous_keypoints[matches[m].trainIdx].pt.x,
+                                             previous_keypoints[matches[m].trainIdx].pt.y ) );
         }
 
-        double percentage1 = TestTriangulation(X1, P2);
-        double percentage2 = TestTriangulation(X2, P2);
+        cv::Mat X_4d(4, cpoints.size(), CV_64F);
+        cv::triangulatePoints(P1, P2, cpoints, ppoints, X_4d);
+        for ( size_t m = 0; m < matches.size(); m++ ) {
+            X.push_back( cv::Point3d( X_4d.at<double>(0,m),
+                                      X_4d.at<double>(1,m),
+                                      X_4d.at<double>(2,m) ));
+        }
 
-        if ( percentage1 > 0.75 && percentage2 > 0.75 ) {
+#endif
+
+        double percentage = TestTriangulation(X, P2);
+
+        if ( percentage > best_percentage ) {
             // update best values-so-far
-            best_percentage1 = percentage1;
-            best_percentage2 = percentage2;
-            best_X = X1;
+            best_percentage = percentage;
+            best_X = X;
             best_transform = cv::Mat(P2).clone();
         }
     }
