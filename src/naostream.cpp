@@ -62,7 +62,7 @@ class VisualOdometry
 
 
     void determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix);
-
+    double distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2, int method );
     double findScaleLinear(cv::Matx34d &Pcam, cv::Mat &points3d, cv::Mat &points2d);
 
 public:
@@ -823,7 +823,6 @@ double VisualOdometry::findScaleLinear(cv::Matx34d &Pcam,
 
 void VisualOdometry::determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix)
 {
-
     // Order of rotation must be roll pitch yaw for this to work
     roll = atan2(RTMatrix(1,0), RTMatrix(0,0));
     pitch = atan2(-RTMatrix(2,0), sqrt( pow(RTMatrix(2,1), 2) + pow(RTMatrix(2,2), 2) ) );
@@ -831,6 +830,7 @@ void VisualOdometry::determineRollPitchYaw(double &roll, double &pitch, double &
 }
 
 VisualOdometry::VisualOdometry(InputSource *source){
+
     this->inputSource = source;
 
     // Load calibrationmatrix K (and distortioncoefficients while we're at it).
@@ -839,6 +839,25 @@ VisualOdometry::VisualOdometry(InputSource *source){
 
 VisualOdometry::~VisualOdometry(){
     delete this->inputSource;
+}
+// TODO: make enum
+#define MEAN_SHIFT 0
+double VisualOdometry::distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2, int method = MEAN_SHIFT ) {
+    assert( kpv1.size() == kpv2.size() );
+    switch ( method ) {
+    case MEAN_SHIFT:
+        cv::Point2d mean_shift( 0, 0 );
+        cv::Point2d total_shift( 0, 0 );
+        cv::Point2d temp_shift;
+        for ( int i = 0; i < kpv1.size(); i++ ) {
+            temp_shift = kpv1[i].pt - kpv2[i].pt;
+            total_shift += cv::Point2d( abs( temp_shift.x ), abs( temp_shift.y ) );
+            mean_shift += temp_shift;
+        }
+        temp_shift = total_shift - mean_shift; //cv::Point2d (mean_shift.x / total_shift.x, mean_shift.y / total_shift.y );
+        return sqrt( temp_shift.ddot( temp_shift ) );
+    default:
+        return 0.0;
 }
 
 
