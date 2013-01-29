@@ -1,11 +1,9 @@
 #include "cloud.hpp"
 
-
 template <class point>
 Cloud<point>::Cloud()
 {
-   points = std::vector<point>();
-   descriptors = std::vector<point>();
+    
 }
 
 template <class point>
@@ -40,6 +38,14 @@ void Cloud<point>::add(point p, uchar d, int f)
 }
 
 template <class point>
+void Cloud<point>::add(std::vector<point> pts, std::vector<uchar> dscs, std::vector<int> fs)
+{
+   points.insert(points.end(), pts.begin(), pts.end());
+   descriptors.insert(descriptors.end(), dscs.begin(), dscs.end());
+   frames.insert(frames.end(), fs.begin(), fs.end());
+}
+
+template <class point>
 void Cloud<point>::remove_last(int n)
 {
    if (n <= 0) {
@@ -51,19 +57,19 @@ void Cloud<point>::remove_last(int n)
 }
 
 template <class point>
-void Cloud<point>::get_points(const std::vector<point> &pts)
+void Cloud<point>::get_points(std::vector<point> &pts)
 {
     pts = points;
 }
 
 template <class point>
-void Cloud<point>::get_descriptors(const std::vector<uchar> &dscs)
+void Cloud<point>::get_descriptors(std::vector<uchar> &dscs)
 {
     dscs = descriptors;
 }
 
 template <class point>
-void Cloud<point>::get_frames(const std::vector<int> &fs)
+void Cloud<point>::get_frames(std::vector<int> &fs)
 {
     fs = frames;
 }
@@ -75,22 +81,69 @@ void Cloud<point>::get(int frame,
         std::vector<uchar>::iterator &d_begin,
         std::vector<uchar>::iterator &d_end)
 {
-   typename std::vector<point>::iterator f = frames.begin();
-   int i = 0;
-   for(; f != frames.end(); f++, i++) {
-      if (*f == frame) {
-         p_begin = points.begin() + i;
-         d_begin = descriptors.begin() + i;
-         break;
-      }
-   }
-   for(; f != frames.end(); f++, i++) {
-      if (*f != frame) {
-         p_end = points.begin() + i;
-         d_end = descriptors.begin() + i;
-         return;
-      }
-   }
-   p_end = points.end();
-   d_end = descriptors.end();
+    std::vector<int>::iterator f = frames.begin();
+    int i = 0;
+    for(; f != frames.end(); f++, i++) {
+        if (*f == frame) {
+            p_begin = points.begin() + i;
+            d_begin = descriptors.begin() + i;
+            break;
+        }
+    }
+    for(; f != frames.end(); f++, i++) {
+        if (*f != frame) {
+            p_end = points.begin() + i;
+            d_end = descriptors.begin() + i;
+            return;
+        }
+    }
+    p_end = points.end();
+    d_end = descriptors.end();
+}
+
+template <class point>
+Cloud<point>::~Cloud()
+{
+}
+
+template <class point>
+void Cloud<point>::show_cloud(pcl::visualization::CloudViewer &viewer, int seconds)
+{    
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+    vec2cloud(points, cloud);
+    viewer.showCloud(cloud);
+    sleep(seconds);
+}
+
+template <class point>
+void Cloud<point>::vec2cloud(std::vector<cv::Point3d> point_vector, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
+    cloud->width  = 1;
+    cloud->height = point_vector.size();
+    cloud->points.resize( cloud->height );
+
+    cv::Point3d pt;
+    for(int i = 0; i != cloud->height; i++) {
+        pt = point_vector[i];
+
+        cloud->points[i].x = pt.x;
+        cloud->points[i].y = pt.y;
+        cloud->points[i].z = pt.z;
+    }
+}
+
+template <class point>
+void Cloud<point>::vec2cloud(std::vector<cv::Point2d> point_vector, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
+    cloud->width  = 1;
+    cloud->height = point_vector.size();
+    cloud->points.resize( cloud->height );
+
+    cv::Point2d pt;
+    for(int i = 0; i != cloud->height; i++) {
+        pt = point_vector[i];
+
+        cloud->points[i].x = pt.x;
+        cloud->points[i].y = pt.y;
+    }
 }

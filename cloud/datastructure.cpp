@@ -8,6 +8,7 @@
 typedef std::vector<cv::KeyPoint> KeyPointVector;
 
 /*
+
     Datastructure:
     ---
     typedef struct
