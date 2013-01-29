@@ -18,10 +18,13 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/features2d/features2d.hpp>
+
 #include <iostream>
 #include <string>
 #include <time.h>
+
 #include "inputsource.hpp"
+#include "cloud.hpp"
 
 #define VISUALIZE 1
 #if VISUALIZE
@@ -57,10 +60,10 @@ class VisualOdometry
     cv::Matx31d IterativeLinearLSTriangulation(cv::Point3d u1, cv::Matx34d P1, cv::Point3d u2, cv::Matx34d P2);
     double TestTriangulation(std::vector<cv::Point3d> &pcloud_pt3d, cv::Matx34d &P);
 
-    double determineFundamentalMatrix(std::vector<cv::Point2f> &current_points,
-                                      std::vector<cv::Point2f> &previous_points,
-                                      std::vector<cv::Point2f> &previous_points_inliers,
-                                      std::vector<cv::Point2f> &current_points_inliers,
+    double determineFundamentalMatrix(std::vector<cv::Point2d> &current_points,
+                                      std::vector<cv::Point2d> &previous_points,
+                                      std::vector<cv::Point2d> &previous_points_inliers,
+                                      std::vector<cv::Point2d> &current_points_inliers,
                                       std::vector<cv::DMatch> &matches,
                                       cv::Matx33d &F);
 
@@ -92,10 +95,10 @@ public:
  * Determine fundamental matrix, and while we're at it, find the inliers for both current and previous
  * points (and store them in new vectors), update matches, and calculate mean displacement.
  **/
-double VisualOdometry::determineFundamentalMatrix(std::vector<cv::Point2f> &previous_points,
-                                                  std::vector<cv::Point2f> &current_points,
-                                                  std::vector<cv::Point2f> &previous_points_inliers,
-                                                  std::vector<cv::Point2f> &current_points_inliers,
+double VisualOdometry::determineFundamentalMatrix(std::vector<cv::Point2d> &previous_points,
+                                                  std::vector<cv::Point2d> &current_points,
+                                                  std::vector<cv::Point2d> &previous_points_inliers,
+                                                  std::vector<cv::Point2d> &current_points_inliers,
                                                   std::vector<cv::DMatch> &matches,
                                                   cv::Matx33d &F)
 {
@@ -342,8 +345,8 @@ bool VisualOdometry::MainLoop() {
     bool epnp = false;
 
     // Storage for 3d points and corresponding descriptors
-    Cloud<cv::Point3d> cloud_3D();
-    Cloud<cv::Point2d> cloud_2D();
+    Cloud<cv::Point3d> cloud_3D;
+    Cloud<cv::Point2d> cloud_2D;
 
     int frame_nr = 0;
     KeyPointVector total_2D_keypoints;
@@ -393,16 +396,18 @@ bool VisualOdometry::MainLoop() {
             matcher.match( current_descriptors, total_3D_descriptors, matches );
 
             // determine correct keypoints and corresponding 3d positions
+            std::vector<cv::Point3d> points_3d;
+            cloud_3D.get_points(points_3d);
             std::vector<cv::Point2d> imagepoints;
             std::vector<cv::Point3d> objectpoints;
-            SolvePnPUsingRansac(matches, current_keypoints, total_3D_pointcloud, imagepoints, objectpoints, P2);
+            SolvePnPUsingRansac(matches, current_keypoints, points_3d, imagepoints, objectpoints, P2);
 
             std::cout << P2 << std::endl;
 
             //////////////////////////////////
             // Triangulate any (yet) unknown points
             matcher.match( current_descriptors, total_2D_descriptors, matches );
-            std::vector<cv::Point2f> matching_2D_points, current_points;
+            std::vector<cv::Point2d> matching_2D_points, current_points;
 
             for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
                 current_points.push_back( current_keypoints[match_it->queryIdx].pt );
@@ -410,7 +415,7 @@ bool VisualOdometry::MainLoop() {
             }
 
             cv::Matx33d fundamental;
-            std::vector<cv::Point2f> previous_points_inliers, current_points_inliers;
+            std::vector<cv::Point2d> previous_points_inliers, current_points_inliers;
 
             double mean_distance = determineFundamentalMatrix(matching_2D_points,
                                                           current_points,
@@ -458,11 +463,11 @@ bool VisualOdometry::MainLoop() {
             matcher.match( current_descriptors, previous_descriptors, matches );
 
             // Calculation of centroid by looping over matches
-            cv::Point2f current_centroid(0,0);
-            cv::Point2f previous_centroid(0,0);
-            std::vector<cv::Point2f> current_points_normalized, previous_points_normalized;
-            cv::Point2f cp;
-            cv::Point2f pp;
+            cv::Point2d current_centroid(0,0);
+            cv::Point2d previous_centroid(0,0);
+            std::vector<cv::Point2d> current_points_normalized, previous_points_normalized;
+            cv::Point2d cp;
+            cv::Point2d pp;
 
             for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
                 cp = current_keypoints[match_it->queryIdx].pt;
@@ -519,7 +524,7 @@ bool VisualOdometry::MainLoop() {
 
             // Find the fundamental matrix and reject outliers and calc distance between matches
             cv::Matx33d F;
-            std::vector<cv::Point2f> current_points_normalized_inliers, previous_points_normalized_inliers;
+            std::vector<cv::Point2d> current_points_normalized_inliers, previous_points_normalized_inliers;
 
             double mean_distance = determineFundamentalMatrix(previous_points_normalized,
                                                               current_points_normalized,
@@ -587,10 +592,7 @@ bool VisualOdometry::MainLoop() {
 #endif
 #if VISUALIZE
             // Display found points
-            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
-            vec2cloud(best_X, cloud);
-            viewer.showCloud(cloud);
-            sleep(20);
+            cloud_3D.show_cloud(viewer, 30);
 #endif
 #if VERBOSE
             for ( size_t x  = 0; x < best_X.size().height; x++ ) {
@@ -904,8 +906,8 @@ void VisualOdometry::SolvePnPUsingRansac( std::vector<cv::DMatch> matches,
                                           std::vector<cv::Point2d> &imagepoints,
                                           std::vector<cv::Point3d> &objectpoints,
                                           cv::Matx34d& transformationmatrix) {
-    cv::Point2f cp;
-    cv::Point3f op;
+    cv::Point2d cp;
+    cv::Point3d op;
     for (int i = 0; i < matches.size(); i++) {
         cp = current_keypoints[matches[i].queryIdx].pt;
         op = total_3D_pointcloud[matches[i].trainIdx];
