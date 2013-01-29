@@ -73,22 +73,26 @@ R. Verschoor,\\Chiel Kooijman and Steven Laan}
 
 \section{Introduction}
 In the field of robotics, one of the main challenges is to track a robot's path
-through the environment. One set of methods focusses on both creating a map of
-its surroundings and determining the robots position in it, and is called
-Simultaneous Localisation And Mapping (SLAM). Estimating the path is called
-odometry.
+through the environment. One set of methods to tackle this problem focusses on
+both creating a map of its surroundings and determining the robots position in
+it, and is called Simultaneous Localisation And Mapping (SLAM). Estimating the
+path is called odometry.
 
-Both are used to correct errors in the execution of planned actions and are
-based on input from the robots sensors, such as camera, laser range scanners,
-radar or sonar.
+Some form of localisation is always needed for robots that move about freely,
+to correct errors in the execution of planned actions, which are inevitable in
+real-world situations. Localisation requires input from the robots sensors,
+such as camera, laser range scanners, radar, sonar, or satellite navigation
+systems such as GPS \citep{easton1978navigation} or GLONASS.
 
 In this paper we focus on visual input only. This is useful because cameras are
 abundant, cheap, small, light, and require little energy. Cameras are passive
-sensors, which is useful when trying to avoid detection.
+sensors, which is useful when trying to avoid detection. Unlike satellite
+navigation cameras work indoors given that there is enough light.
 On the other hand, video input is more difficult to process, as it is subject
 to lighting conditions and a single image does not provide any 3D information
 by itself.
 
+% Overview of different sections
 \section{Related Work}
 
 \section{Theory}
