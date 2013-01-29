@@ -3,7 +3,7 @@
 
 int main ()
 {
-    Cloud<cv::Point3d> info_3D();
+    Cloud<cv::Point3d> info_3D;
 
     std::vector<cv::Point3d> pts;
     std::vector<uchar> dscs;

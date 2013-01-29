@@ -19,7 +19,6 @@ set(_salvo_srcs
   naostream.cpp
   inputsource.cpp
   inputsource.hpp
-  cloud.cpp
   cloud.hpp
 )
     

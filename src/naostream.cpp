@@ -393,6 +393,8 @@ bool VisualOdometry::MainLoop() {
         if (epnp)
         {
             // CASE 1: SolvePnP
+            std::cout << current_descriptors.size() << "   " << total_3D_descriptors.size() << std::endl;
+
             matcher.match( current_descriptors, total_3D_descriptors, matches );
 
             // determine correct keypoints and corresponding 3d positions
@@ -592,7 +594,7 @@ bool VisualOdometry::MainLoop() {
 #endif
 #if VISUALIZE
             // Display found points
-            cloud_3D.show_cloud(viewer, 30);
+            cloud_3D.show_cloud(viewer, 3);
 #endif
 #if VERBOSE
             for ( size_t x  = 0; x < best_X.size().height; x++ ) {
@@ -641,9 +643,12 @@ bool VisualOdometry::MainLoop() {
             // Update total points/cloud
             std::cout << "Storing points" << std::endl;
             //total_3D_pointcloud = best_X;
+            total_3D_descriptors = cv::Mat(current_descriptors.size().height, matches.size(), current_descriptors.type());
             for ( size_t matchnr = 0; matchnr < matches.size(); matchnr++) {
-                total_3D_descriptors.push_back( current_descriptors.at<uchar>(matchnr) );
+                 total_3D_descriptors.col(matchnr) = current_descriptors.col(matchnr);
             }
+            std::cout << current_descriptors.size() << "\n" << total_3D_descriptors.size() << "\n" << std::endl;
+
             cloud_3D.add(best_X, total_3D_descriptors, frame_nr);
             
             // TODO BE SMART
