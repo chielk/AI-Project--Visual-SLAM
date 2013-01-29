@@ -342,7 +342,10 @@ bool VisualOdometry::MainLoop() {
     bool epnp = false;
 
     // Storage for 3d points and corresponding descriptors
-    std::vector<cv::Point3d> total_3D_pointcloud;
+    Cloud<cv::Point3d> cloud_3D();
+    Cloud<cv::Point2d> cloud_2D();
+
+    int frame_nr = 0;
     KeyPointVector total_2D_keypoints;
     cv::Mat total_3D_descriptors;
     cv::Mat total_2D_descriptors;
@@ -635,11 +638,12 @@ bool VisualOdometry::MainLoop() {
 
             // Update total points/cloud
             std::cout << "Storing points" << std::endl;
-            total_3D_pointcloud = best_X;
+            //total_3D_pointcloud = best_X;
             for ( size_t matchnr = 0; matchnr < matches.size(); matchnr++) {
                 total_3D_descriptors.push_back( current_descriptors.at<uchar>(matchnr) );
             }
-
+            cloud_3D.add(best_X, total_3D_descriptors, frame_nr);
+            
             // TODO BE SMART
 
             //cv::Matx44d transformationMatrix( best_transform(0,0),best_transform(0,1),best_transform(0,2),best_transform(0,3),
@@ -674,6 +678,7 @@ bool VisualOdometry::MainLoop() {
 
 
         }
+        frame_nr++;
     }
     // Main loop successful.
     return true;

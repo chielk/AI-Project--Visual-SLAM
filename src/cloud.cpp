@@ -38,10 +38,12 @@ void Cloud<point>::add(point p, uchar d, int f)
 }
 
 template <class point>
-void Cloud<point>::add(std::vector<point> pts, std::vector<uchar> dscs, std::vector<int> fs)
+void Cloud<point>::add(std::vector<point> pts, std::vector<uchar> dscs, int frame_nr)
 {
    points.insert(points.end(), pts.begin(), pts.end());
    descriptors.insert(descriptors.end(), dscs.begin(), dscs.end());
+
+   std::vector<int> fs(pts.size(), frame_nr);
    frames.insert(frames.end(), fs.begin(), fs.end());
 }
 

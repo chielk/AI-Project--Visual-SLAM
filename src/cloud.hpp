@@ -14,7 +14,7 @@ template <class point> class Cloud
         void remove_last(int);
         void remove_frame(int);
         void add(point, uchar, int);
-        void add(std::vector<point>, std::vector<uchar>, std::vector<int>);
+        void add(std::vector<point>, std::vector<uchar>, int frame_nr);
         void get(int frame,
                 typename std::vector<point>::iterator &p_begin,
                 typename std::vector<point>::iterator &p_end,
