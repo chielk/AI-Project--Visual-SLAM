@@ -3,7 +3,7 @@
 
 int main ()
 {
-    Cloud<cv::Point3d> info_3D;
+    Cloud<cv::Point3d> info_3D();
 
     std::vector<cv::Point3d> pts;
     std::vector<uchar> dscs;
@@ -17,9 +17,9 @@ int main ()
     fs.push_back(frame);
 
     // Push 3 times a vector of points to the structure
-    info_3D.add(pts, dscs, fs);
-    info_3D.add(pts, dscs, fs);
-    info_3D.add(pts, dscs, fs);
+    info_3D.add(pts, dscs, 1);
+    info_3D.add(pts, dscs, 2);
+    info_3D.add(pts, dscs, 3);
 
     // Create answer structures
     std::vector<int> answer1;

@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <vector>
-#include "pcl/visualization/cloud_viewer.h"
+#include "pcl-1.6/pcl/visualization/cloud_viewer.h"
 
 template <class point> class Cloud
 {
