@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <fstream>
+#include "inputsource.hpp"
 
 #define GCC_VERSION (__GNUC__ * 10000 \
 		               + __GNUC_MINOR__ * 100 \

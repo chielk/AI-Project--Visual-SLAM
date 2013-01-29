@@ -19,6 +19,8 @@ set(_salvo_srcs
   naostream.cpp
   inputsource.cpp
   inputsource.hpp
+  cloud.cpp
+  cloud.hpp
 )
     
 qi_create_bin(controller ${_controller_srcs})

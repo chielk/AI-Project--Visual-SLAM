@@ -18,7 +18,6 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/features2d/features2d.hpp>
-
 #include <iostream>
 #include <string>
 #include <time.h>
@@ -86,6 +85,12 @@ class VisualOdometry
     void FindBestRandT(KeyPointVector &previous_keypoints, KeyPointVector &current_keypoints, std::vector<cv::DMatch> &matches,
                        cv::Mat &R1, cv::Mat &R2, cv::Mat &t, std::vector<cv::Point3d> &best_X, cv::Matx34d &best_transform);
 
+    void SolvePnPUsingRansac( std::vector<cv::DMatch> matches,
+                              KeyPointVector current_keypoints,
+                              std::vector<cv::Point3d> total_3D_pointcloud,
+                              std::vector<cv::Point2d> &imagepoints,
+                              std::vector<cv::Point3d> &objectpoints,
+                              cv::Matx34d& transformationmatrix);
 
     void determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix);
     double distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2, DMMethod method );
@@ -352,7 +357,6 @@ bool VisualOdometry::MainLoop() {
     // Use frame-to-frame initially.
     bool epnp = false;
 
-
     // Storage for 3d points and corresponding descriptors
     std::vector<cv::Point3d> total_3D_pointcloud;
     KeyPointVector total_2D_keypoints;
@@ -402,27 +406,9 @@ bool VisualOdometry::MainLoop() {
             matcher.match( current_descriptors, total_3D_descriptors, matches );
 
             // determine correct keypoints and corresponding 3d positions
-            std::vector<cv::Point2f> imagepoints;
-            std::vector<cv::Point3f> objectpoints;
-
-            cv::Point2f cp;
-            cv::Point3f op;
-            for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
-                cp = current_keypoints[match_it->queryIdx].pt;
-                op = total_3D_pointcloud[match_it->trainIdx];
-
-                imagepoints.push_back(cp);
-                objectpoints.push_back(op);
-            }
-
-            cv::Mat rvec, tvec, inliers;
-            cv::solvePnPRansac(objectpoints, imagepoints, K, distortionCoeffs, rvec, tvec,
-                               false, 100, 8.0, 100, inliers);
-
-            // Construct matrix [R|t]
-            cv::Matx33d R;
-            cv::Rodrigues(rvec, R);
-            cv::hconcat(R, tvec, P2);
+            std::vector<cv::Point2d> imagepoints;
+            std::vector<cv::Point3d> objectpoints;
+            SolvePnPUsingRansac(matches, current_keypoints, total_3D_pointcloud, imagepoints, objectpoints, P2);
 
             std::cout << P2 << std::endl;
 
@@ -699,7 +685,10 @@ bool VisualOdometry::MainLoop() {
             previous_frame = current_frame;
             previous_descriptors = current_descriptors;
 
-            std::cout << std::endl;
+
+            epnp = true;
+
+
         }
     }
     // Main loop successful.
@@ -798,7 +787,7 @@ double VisualOdometry::findScaleLinear(cv::Matx34d &Pcam,
                              Qw.at<double>(1,i) );
 
         cv::subtract( ((cv::Mat)r12) * (cv::Mat)pointX,
-                      (cv::Mat)pointx * ((cv::Mat)((cv::Mat)r3   * (cv::Mat)pointX)),
+                      (cv::Mat)pointx * ((cv::Mat)((cv::Mat)r3 * (cv::Mat)pointX)),
                       temp1);
 
         //temp2 = Pcam(3,4) * Qw(1:2,i) - Pcam(1:2,4);
@@ -918,6 +907,32 @@ int main( int argc, char* argv[] ) {
     {
         visualOdometry->MainLoop();
     }
+}
+
+void VisualOdometry::SolvePnPUsingRansac( std::vector<cv::DMatch> matches,
+                                          KeyPointVector current_keypoints,
+                                          std::vector<cv::Point3d> total_3D_pointcloud,
+                                          std::vector<cv::Point2d> &imagepoints,
+                                          std::vector<cv::Point3d> &objectpoints,
+                                          cv::Matx34d& transformationmatrix) {
+    cv::Point2f cp;
+    cv::Point3f op;
+    for (int i = 0; i < matches.size(); i++) {
+        cp = current_keypoints[matches[i].queryIdx].pt;
+        op = total_3D_pointcloud[matches[i].trainIdx];
+
+        imagepoints.push_back(cp);
+        objectpoints.push_back(op);
+    }
+
+    cv::Mat rvec, tvec, inliers;
+    cv::solvePnPRansac(objectpoints, imagepoints, K, distortionCoeffs, rvec, tvec,
+                       false, 100, 8.0, 100, inliers);
+
+    // Construct matrix [R|t]
+    cv::Matx33d R;
+    cv::Rodrigues(rvec, R);
+    cv::hconcat(R, tvec, transformationmatrix);
 }
 
 /**
