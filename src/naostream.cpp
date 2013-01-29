@@ -374,7 +374,6 @@ bool VisualOdometry::MainLoop() {
             return false;
         }
 
-
         // Convert to grayscale
         cv::Mat colorMat = current_frame.img.clone();
         cv::cvtColor(colorMat, current_frame.img, CV_BGR2GRAY);
@@ -395,6 +394,7 @@ bool VisualOdometry::MainLoop() {
             // CASE 1: SolvePnP
             std::cout << current_descriptors.size() << "   " << total_3D_descriptors.size() << std::endl;
 
+            cloud_3D.get_descriptors(total_3D_descriptors);
             matcher.match( current_descriptors, total_3D_descriptors, matches );
 
             // determine correct keypoints and corresponding 3d positions
