@@ -3,8 +3,7 @@
 template <class point>
 Cloud<point>::Cloud()
 {
-//   points = std::vector<point>();
-//   descriptors = std::vector<point>();
+    
 }
 
 template <class point>
@@ -82,28 +81,69 @@ void Cloud<point>::get(int frame,
         std::vector<uchar>::iterator &d_begin,
         std::vector<uchar>::iterator &d_end)
 {
-   typename std::vector<point>::iterator f = frames.begin();
-   int i = 0;
-   for(; f != frames.end(); f++, i++) {
-      if (*f == frame) {
-         p_begin = points.begin() + i;
-         d_begin = descriptors.begin() + i;
-         break;
-      }
-   }
-   for(; f != frames.end(); f++, i++) {
-      if (*f != frame) {
-         p_end = points.begin() + i;
-         d_end = descriptors.begin() + i;
-         return;
-      }
-   }
-   p_end = points.end();
-   d_end = descriptors.end();
+    std::vector<int>::iterator f = frames.begin();
+    int i = 0;
+    for(; f != frames.end(); f++, i++) {
+        if (*f == frame) {
+            p_begin = points.begin() + i;
+            d_begin = descriptors.begin() + i;
+            break;
+        }
+    }
+    for(; f != frames.end(); f++, i++) {
+        if (*f != frame) {
+            p_end = points.begin() + i;
+            d_end = descriptors.begin() + i;
+            return;
+        }
+    }
+    p_end = points.end();
+    d_end = descriptors.end();
 }
 
 template <class point>
 Cloud<point>::~Cloud()
 {
+}
 
+template <class point>
+void Cloud<point>::show_cloud(pcl::visualization::CloudViewer &viewer, int seconds)
+{    
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+    vec2cloud(points, cloud);
+    viewer.showCloud(cloud);
+    sleep(seconds);
+}
+
+template <class point>
+void Cloud<point>::vec2cloud(std::vector<cv::Point3d> point_vector, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
+    cloud->width  = 1;
+    cloud->height = point_vector.size();
+    cloud->points.resize( cloud->height );
+
+    cv::Point3d pt;
+    for(int i = 0; i != cloud->height; i++) {
+        pt = point_vector[i];
+
+        cloud->points[i].x = pt.x;
+        cloud->points[i].y = pt.y;
+        cloud->points[i].z = pt.z;
+    }
+}
+
+template <class point>
+void Cloud<point>::vec2cloud(std::vector<cv::Point2d> point_vector, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
+    cloud->width  = 1;
+    cloud->height = point_vector.size();
+    cloud->points.resize( cloud->height );
+
+    cv::Point2d pt;
+    for(int i = 0; i != cloud->height; i++) {
+        pt = point_vector[i];
+
+        cloud->points[i].x = pt.x;
+        cloud->points[i].y = pt.y;
+    }
 }

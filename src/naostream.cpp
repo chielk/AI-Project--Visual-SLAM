@@ -26,23 +26,7 @@
 
 #define VISUALIZE 1
 #if VISUALIZE
-#include "pcl/visualization/cloud_viewer.h"
 
-void vec2cloud(std::vector<cv::Point3d> point_vector, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
-{
-    cloud->width  = 1;
-    cloud->height = point_vector.size();
-    cloud->points.resize( cloud->height );
-
-    cv::Point3d pt;
-    for(int i = 0; i != cloud->height; i++) {
-        pt = point_vector[i];
-
-        cloud->points[i].x = pt.x;
-        cloud->points[i].y = pt.y;
-        cloud->points[i].z = pt.z;
-    }
-}
 #endif
 
 #define RED cv::Scalar( 0, 0, 255 )

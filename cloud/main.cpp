@@ -3,12 +3,12 @@
 
 int main ()
 {
-    Cloud<cv::Point3f> info_3D;
+    Cloud<cv::Point3d> info_3D;
 
-    std::vector<cv::Point3f> pts;
+    std::vector<cv::Point3d> pts;
     std::vector<uchar> dscs;
     std::vector<int> fs;
-    cv::Point3f pt(1, 2, 3);
+    cv::Point3d pt(1, 2, 3);
     uchar dsc = 123;
     int frame = 3;
 
@@ -24,29 +24,29 @@ int main ()
     // Create answer structures
     std::vector<int> answer1;
     std::vector<uchar> answer2;
-    std::vector<cv::Point3f> answer3;
+    std::vector<cv::Point3d> answer3;
     info_3D.get_frames(answer1);
     info_3D.get_descriptors(answer2);
     info_3D.get_points(answer3);
     // Print last structure
-    std::cout << answer1.front() << std::endl;
-    std::cout << answer2.front() << std::endl;
-    std::cout << answer3.front() << std::endl;
+    //std::cout << answer1.front() << std::endl;
+    //std::cout << answer2.front() << std::endl;
+    //std::cout << answer3.front() << std::endl;
     
-    std::vector<cv::Point3f>::iterator p_begin;
-    std::vector<cv::Point3f>::iterator p_end;
-    std::vector<uchar>::iterator d_begin;
+    std::vector<cv::Point3d>::iterator p;
+    std::vector<cv::Point3d>::iterator p_end;
+    std::vector<uchar>::iterator d;
     std::vector<uchar>::iterator d_end;
 
-    info_3D.get(3, p_begin, p_end, d_begin, d_end);
+    info_3D.get(3, p, p_end, d, d_end);
     
     
-/*
-    for(;p_begin != p_end; p_begin++; d_begin_end;)
+    for(;p != p_end; p++, d++)
     {
-        std::cout << *p_begin << std::endl;
-        std::cout << *d_begin << std::endl;
+        std::cout << *p << std::endl;
+        std::cout << *d << std::endl;
     }
 
-*/
+    pcl::visualization::CloudViewer viewer("Cloudviewer");
+    info_3D.show_cloud(viewer, 30);
 }
