@@ -13,7 +13,7 @@ of Amsterdam}
 
 \begin{document}
 
-\begin{frame}[Monocular Visual Odometry on the Nao]
+\begin{frame}{Monocular Visual Odometry on the Nao}
 	% image of Nao
 	\includegraphics[scale=.3]{images/nao-head}
 
@@ -21,21 +21,21 @@ of Amsterdam}
 	position over time.
 \end{frame}
 
-\begin{frame}[Why Odometry?]
+\begin{frame}{Why Odometry?}
 	\begin{itemize}
 		\item Freely-moving agents need to know where they are
 		\item Execution of plan in real world always introduces errors
 	\end{itemize}
 \end{frame}
 
-\begin{frame}[Why Visual?]
+\begin{frame}{Why Visual?}
 	Alternatives: sonar, laser range, GPS
 
 	cameras are cheap, abundant, light, passive sensors
 	cameras work indoors
 \end{frame}
 
-\begin{frame}[Using Camera Input for Odometry]
+\begin{frame}{Using Camera Input for Odometry}
 	\begin{itemize}
 		\item Construct 3D representation from 2D images to determine camera
 			position
@@ -43,13 +43,13 @@ of Amsterdam}
 	\end{itemize}
 \end{frame}
 
-\begin{frame}[Calibration]
+\begin{frame}{Calibration}
 	Camera input is distorted (i.e. lines are not straight in corners)
 
 	% TODO chessboard image
 \end{frame}
 
-\begin{frame}[Calibration]
+\begin{frame}{Calibration}
 	Use `chessboard' of known size
 	\begin{itemize}
 		\item find distortion coefficients
@@ -59,7 +59,7 @@ of Amsterdam}
 	% TODO distorted/undistorted image here
 \end{frame}
 
-\begin{frame}[Descriptors]
+\begin{frame}{Descriptors}
 	To reconstruct 3D world we need to match points between images
 	\begin{enumerate}
 		\item find salient points
@@ -68,7 +68,7 @@ of Amsterdam}
 	\end{enumerate}
 \end{frame}
 
-\begin{frame}[Homography]
+\begin{frame}{Homography}
 	find positions of 2D points in 3D
 	Images need to be sufficiently different for homography
 	need keyframe selection to guarantee reliable reconstruction:
