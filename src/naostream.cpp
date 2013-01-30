@@ -357,7 +357,7 @@ bool VisualOdometry::MainLoop() {
     cv::Mat total_2D_descriptors;
 
     // Scale of initial and current image
-    double current_scale, init_scale;
+    double current_scale, init_scale, ratio_scale;
 
     // Construct matrix [I|0]
     cv::Matx34d P1( 1, 0, 0, 0,
@@ -413,7 +413,6 @@ bool VisualOdometry::MainLoop() {
             // Print out [R|T]
             std::cout << P2 << std::endl;
 
-
             //////////////////////////////////
             // Triangulate any (yet) unknown points
             matcher.match( current_descriptors, total_2D_descriptors, matches );
@@ -461,16 +460,6 @@ bool VisualOdometry::MainLoop() {
             if ( cv::determinant(R1) < 0 ) R1 = -R1;
             if ( cv::determinant(R2) < 0 ) R2 = -R2;
 
-            // Determine scale
-            current_scale = findScaleLinear(P2,
-                                            objectpoints,
-                                            imagepoints);
-
-            std::cout << "Scale First Frame: "    << init_scale << std::endl;
-            std::cout << "Scale Current Frame: "  << current_scale  << std::endl;
-
-            // You want to scale the points towards your init scale.
-            scale_ratio = init_scale / current_scale
        // Add to all_descriptors and 3d point cloud
         } else {
 
@@ -611,11 +600,6 @@ bool VisualOdometry::MainLoop() {
             // Display found points
             cloud_3D.show_cloud(viewer, 3);
 #endif
-#if VERBOSE
-            for ( size_t x  = 0; x < best_X.size().height; x++ ) {
-                std::cout << best_X[x] << std::endl;
-            }
-#endif
 
             /**
              *  Input  - Pcam  -> (3x4) Camera position
@@ -648,12 +632,46 @@ bool VisualOdometry::MainLoop() {
             best_transform(2,3) /= norm_t;
 
             std::cout << best_transform << std::endl;
-            init_scale = findScaleLinear(best_transform,
+
+            if(frame_nr == 0) {
+                init_scale = findScaleLinear(best_transform,
                                             objectpoints,
                                             imagepoints);
+                std::cout << "Scale First Frame: " << init_scale << std::endl;
+            } else {
+                current_scale = findScaleLinear(best_transform,
+                                            objectpoints,
+                                            imagepoints);
+                std::cout << "Scale First Frame: "   << init_scale << std::endl;
+                std::cout << "Scale Current Frame: " << current_scale << std::endl;
 
-            std::cout << "Scale current: " << init_scale << std::endl;
+                std::cout << "Rescale points..." << std::endl;
+                // You want to scale the points towards your init scale.
+                scale_ratio = init_scale / current_scale;
+                best_transform(0,3) *= scale_ratio;
+                best_transform(1,3) *= scale_ratio;
+                best_transform(2,3) *= scale_ratio;
 
+                // Clear current best_X and obtain it with new scaling
+                best_X.clear()
+                cv::Matx34d P1( 1, 0, 0, 0,
+                        0, 1, 0, 0,
+                        0, 0, 1, 0 );
+                // Inverse camera matrix
+                cv::Mat Kinv = (cv::Mat)K.inv();
+
+                triangulatePoints(previous_keypoints, current_keypoints, Kinv, P1, best_transform, best_X);
+#if VERBOSE
+                std::cout << "Scaled found transformation\n" << best_transform << "\n" << std::endl;
+#endif
+            }
+
+#if VERBOSE
+            std::cout << "Found points: " << std::endl;
+            for ( size_t x  = 0; x < best_X.size().height; x++ ) {
+                std::cout << best_X[x] << std::endl;
+            }
+#endif
 
             // Update total points/cloud
             std::cout << "Storing points" << std::endl;
@@ -811,9 +829,6 @@ double VisualOdometry::findScaleLinear(cv::Matx34d &Pcam,
     cv::Mat scalemat = ((A.t() * b) / (A.t() * A));
     scale = scalemat.at<double>(0, 0);
 
-    //Pcam(0,3) *= scale;
-    //Pcam(1,3) *= scale;
-    //Pcam(2,3) *= scale;
 
     // METHOD 4
     double scale2;
