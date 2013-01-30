@@ -373,6 +373,9 @@ bool VisualOdometry::MainLoop() {
     cv::Mat total_3D_descriptors;
     cv::Mat total_2D_descriptors;
 
+    // Scale of initial and current image
+    double current_scale, init_scale;
+
     // Construct matrix [I|0]
     cv::Matx34d P1( 1, 0, 0, 0,
                     0, 1, 0, 0,
@@ -439,7 +442,9 @@ bool VisualOdometry::MainLoop() {
             std::vector<cv::Point3d> objectpoints;
             SolvePnPUsingRansac(good_matches, current_keypoints, points_3d, imagepoints, objectpoints, P2);
 
+            // Print out [R|T]
             std::cout << P2 << std::endl;
+
 
             //////////////////////////////////
             // Triangulate any (yet) unknown points
@@ -702,11 +707,11 @@ bool VisualOdometry::MainLoop() {
             best_transform(2,3) /= norm_t;
 
             std::cout << best_transform << std::endl;
-            double scale1 = findScaleLinear(best_transform,
+            init_scale = findScaleLinear(best_transform,
                                             objectpoints,
                                             imagepoints);
 
-            std::cout << "Scale current: " << scale1 << std::endl;
+            std::cout << "Scale current: " << init_scale << std::endl;
 
 
             // Update total points/cloud
@@ -748,8 +753,6 @@ bool VisualOdometry::MainLoop() {
 
 
             epnp = true;
-
-
         }
         frame_nr++;
     }
@@ -860,20 +863,18 @@ double VisualOdometry::findScaleLinear(cv::Matx34d &Pcam,
         b.at<double>(i*2,   0) = temp1(0);
         b.at<double>(i*2+1, 0) = temp1(1);
     }
-    scale = (double)((cv::Mat)((cv::Mat(A.t() * A)) * A.t() *b)).at<double>(0,0);
 
-    Pcam(0,3) *= scale;
-    Pcam(1,3) *= scale;
-    Pcam(2,3) *= scale;
+    cv::Mat scalemat = ((A.t() * b) / (A.t() * A));
+    scale = scalemat.at<double>(0, 0);
 
+    //Pcam(0,3) *= scale;
+    //Pcam(1,3) *= scale;
+    //Pcam(2,3) *= scale;
 
     // METHOD 4
     double scale2;
-    A ( points2d.size().width, 1 );
-    b ( points2d.size().width, 1 );
-
-    cv::Mat r1minr2;
-    cv::subtract(r1, r2, r1minr2);
+    cv::Mat_<double> A2 ( points2d.size().width, 1 );
+    cv::Mat_<double> b2 ( points2d.size().width, 1 );
 
     for ( int i = 0; i < points3d.size().width; i++ ) {
         cv::Matx31d pointX ( points3d.at<double>(0,i),
@@ -883,20 +884,21 @@ double VisualOdometry::findScaleLinear(cv::Matx34d &Pcam,
                              Qw.at<double>(1,i) );
 
         //                  Pcam(2,4) * ( Qw(1,i)            / Qw(2,i))            - Pcam(1,4);
-        A.at<double>(i,1) = Pcam(2,4) * (pointx.x / pointx.y), Pcam(1,4);
+        A2.at<double>(i, 0) = Pcam(1,3) * (pointx.x / pointx.y) - Pcam(0,3);
 
         //                  (Pcam(1,1:3)-Pcam(2,1:3) *
         //                  (Qw(1,i) / Qw(2,i))) * X3D(1:3,i)
-        b.at<double>(i,1) = (pointx.x / pointx.y) * ((cv::Mat)(r1minr2 * (cv::Mat)pointX)).at<double>(0,0);
-
-       }
+        cv::Mat temp = ((cv::Mat) r1 - ((cv::Mat) r2 * (pointx.x / pointx.y))) * (cv::Mat) pointX;
+        b2.at<double>(i, 0) = temp.at<double>(0,0);
+    }
     scale2 = (double)((cv::Mat)((cv::Mat(A.t() * A)) * A.t() *b)).at<double>(0,0);
 
+    scalemat = ((A2.t() * b2) / (A2.t() * A2));
+    scale2 = scalemat.at<double>(0, 0);
 
     std::cout << Pcam << std::endl;
     std::cout << "Scale method 3: " << scale << std::endl;
     std::cout << "Scale method 4: " << scale2 << std::endl;
-
 
     return scale;
 }
