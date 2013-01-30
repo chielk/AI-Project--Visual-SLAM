@@ -41,6 +41,7 @@
 #define _ORB   2
 
 #define _FEATURE _BRISK
+#define HARTLEY_TRIANGULATION
 
 enum DMMethod { 
     TS_MS, // Total Shift - Mean Shift
@@ -82,6 +83,8 @@ class VisualOdometry
     void determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix);
     double distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2, DMMethod method );
     double findScaleLinear(cv::Matx34d &Pcam, cv::Mat &points3d, cv::Mat &points2d);
+    void triangulatePoints(KeyPointVector &previous_keypoints, KeyPointVector &current_keypoints,
+            std::vector<cv::DMatch> &matches, cv::Mat Kinv, cv::Matx34d P1, cv::Matx34d P2, std::vector<cv::Point3d> &X);
 
 public:
     VisualOdometry(InputSource *source);
@@ -949,53 +952,13 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
 
         X.clear();
         P2 = possible_projections[i];
-#if 1
-        // TODO replace by iterator?
-        for ( size_t m = 0; m < matches.size(); m++ ) {
 
-
-            cv::Point3d current_point_homogeneous( current_keypoints[matches[m].queryIdx].pt.x,
-                                                   current_keypoints[matches[m].queryIdx].pt.y,
-                                                   1 );
-            cv::Point3d previous_point_homogeneous( previous_keypoints[matches[m].trainIdx].pt.x,
-                                                    previous_keypoints[matches[m].trainIdx].pt.y,
-                                                    1 );
-
-            cv::Matx31d k_current_point ( (cv::Mat)(Kinv * cv::Mat( current_point_homogeneous )));
-            current_point_homogeneous.x = k_current_point(0);
-            current_point_homogeneous.y = k_current_point(1);
-            current_point_homogeneous.z = k_current_point(2);
-
-            cv::Matx31d k_previous_point( (cv::Mat)(Kinv * cv::Mat( previous_point_homogeneous )));
-            previous_point_homogeneous.x = k_previous_point(0);
-            previous_point_homogeneous.y = k_previous_point(1);
-            previous_point_homogeneous.z = k_previous_point(2);
-
-            cv::Matx31d X_a = IterativeLinearLSTriangulation(
-                previous_point_homogeneous,	P1,
-                current_point_homogeneous, P2 );
-
-            X.push_back( cv::Point3d( X_a(0), X_a(1), X_a(2) ));
-        }
-#else
-        // Use opencvs triangulation method
-        std::vector<cv::Point2d> cpoints, ppoints;
-        for ( size_t m = 0; m < matches.size(); m++ ) {
-            cpoints.push_back( cv::Point2d ( current_keypoints[matches[m].queryIdx].pt.x,
-                                             current_keypoints[matches[m].queryIdx].pt.y ) );
-            ppoints.push_back( cv::Point2d ( previous_keypoints[matches[m].trainIdx].pt.x,
-                                             previous_keypoints[matches[m].trainIdx].pt.y ) );
-        }
-
-        cv::Mat X_4d(4, cpoints.size(), CV_64F);
-        cv::triangulatePoints(P1, P2, cpoints, ppoints, X_4d);
-        for ( size_t m = 0; m < matches.size(); m++ ) {
-            X.push_back( cv::Point3d( X_4d.at<double>(0,m),
-                                      X_4d.at<double>(1,m),
-                                      X_4d.at<double>(2,m) ));
-        }
-
-#endif
+        triangulatePoints(previous_keypoints,
+                current_keypoints,
+                Kinv,
+                P1,
+                P2,
+                X);
 
         double percentage = TestTriangulation(X, P2);
 
@@ -1006,4 +969,54 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
             best_transform = cv::Mat(P2).clone();
         }
     }
+}
+
+void VisualOdometry::triangulatePoints(KeyPointVector &previous_keypoints,
+    KeyPointVector &current_keypoints, std::vector<cv::DMatch> &matches,
+    cv::Mat Kinv, cv::Matx34d P1, cv::Matx34d P2, std::vector<cv::Point3d> &X)
+{
+#if HARTLEY_TRIANGULATION
+    // TODO replace by iterator?
+    for ( size_t m = 0; m < matches.size(); m++ ) {
+        cv::Point3d current_point_homogeneous( current_keypoints[matches[m].queryIdx].pt.x,
+                current_keypoints[matches[m].queryIdx].pt.y,
+                1 );
+        cv::Point3d previous_point_homogeneous( previous_keypoints[matches[m].trainIdx].pt.x,
+                previous_keypoints[matches[m].trainIdx].pt.y,
+                1 );
+
+        cv::Matx31d k_current_point ( (cv::Mat)(Kinv * cv::Mat( current_point_homogeneous )));
+        current_point_homogeneous.x = k_current_point(0);
+        current_point_homogeneous.y = k_current_point(1);
+        current_point_homogeneous.z = k_current_point(2);
+
+        cv::Matx31d k_previous_point( (cv::Mat)(Kinv * cv::Mat( previous_point_homogeneous )));
+        previous_point_homogeneous.x = k_previous_point(0);
+        previous_point_homogeneous.y = k_previous_point(1);
+        previous_point_homogeneous.z = k_previous_point(2);
+
+        cv::Matx31d X_a = IterativeLinearLSTriangulation(
+                previous_point_homogeneous,	P1,
+                current_point_homogeneous, P2 );
+
+        X.push_back( cv::Point3d( X_a(0), X_a(1), X_a(2) ));
+    }
+#else
+    // Use opencvs triangulation method
+    std::vector<cv::Point2d> cpoints, ppoints;
+    for ( size_t m = 0; m < matches.size(); m++ ) {
+        cpoints.push_back( cv::Point2d ( current_keypoints[matches[m].queryIdx].pt.x,
+                    current_keypoints[matches[m].queryIdx].pt.y ) );
+        ppoints.push_back( cv::Point2d ( previous_keypoints[matches[m].trainIdx].pt.x,
+                    previous_keypoints[matches[m].trainIdx].pt.y ) );
+    }
+
+    cv::Mat X_4d(4, cpoints.size(), CV_64F);
+    cv::triangulatePoints(P1, P2, cpoints, ppoints, X_4d);
+    for ( size_t m = 0; m < matches.size(); m++ ) {
+        X.push_back( cv::Point3d( X_4d.at<double>(0,m),
+                    X_4d.at<double>(1,m),
+                    X_4d.at<double>(2,m) ));
+    }
+#endif
 }
