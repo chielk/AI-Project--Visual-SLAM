@@ -80,6 +80,10 @@ of Amsterdam}
 		\item Find camera matrix (expresses focal length in pixels)
 	\end{itemize}
 
+	\begin{center}
+		\includegraphics[width=.5\linewidth]{images/image-distorted}
+		\includegraphics[width=.5\linewidth]{images/image-undistorted}
+	\end{center}
 	% TODO distorted/undistorted image here
 \end{frame}
 
@@ -87,8 +91,10 @@ of Amsterdam}
 	To reconstruct 3D world we need to match points between images
 	\begin{enumerate}
 		\item Find salient points
-		\item Make descriptor of points (using BRISK features: fast and robust)
-		\item Match points, discard unlikely matches (with RANSAC)
+		\item Make descriptor of points using BRISK features: fast and robust
+			\cite{Leutenegger2011}
+		\item Match points, discard unlikely matches with RANSAC
+			\cite{fischler1981random}
 	\end{enumerate}
 \end{frame}
 
@@ -133,8 +139,10 @@ of Amsterdam}
 % image-to-world
 
 
-\bibliographystyle{plainnat}
-\bibliography{../report/references}
+\begin{frame}{References}
+	\bibliographystyle{plain}
+	\bibliography{../report/references}
+\end{frame}
 
 \end{document}
 % vim: set spell : spelllang=en_gb :
