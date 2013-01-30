@@ -356,6 +356,9 @@ bool VisualOdometry::MainLoop() {
     cv::Mat total_3D_descriptors;
     cv::Mat total_2D_descriptors;
 
+    // Scale of initial and current image
+    double current_scale, init_scale;
+
     // Construct matrix [I|0]
     cv::Matx34d P1( 1, 0, 0, 0,
                     0, 1, 0, 0,
@@ -407,7 +410,9 @@ bool VisualOdometry::MainLoop() {
             std::vector<cv::Point3d> objectpoints;
             SolvePnPUsingRansac(matches, current_keypoints, points_3d, imagepoints, objectpoints, P2);
 
+            // Print out [R|T]
             std::cout << P2 << std::endl;
+
 
             //////////////////////////////////
             // Triangulate any (yet) unknown points
@@ -456,10 +461,17 @@ bool VisualOdometry::MainLoop() {
             if ( cv::determinant(R1) < 0 ) R1 = -R1;
             if ( cv::determinant(R2) < 0 ) R2 = -R2;
 
+            // Determine scale
+            current_scale = findScaleLinear(P2,
+                                            objectpoints,
+                                            imagepoints);
 
+            std::cout << "Scale First Frame: "    << init_scale << std::endl;
+            std::cout << "Scale Current Frame: "  << current_scale  << std::endl;
+
+            // You want to scale the points towards your init scale.
+            scale_ratio = init_scale / current_scale
        // Add to all_descriptors and 3d point cloud
-
-
         } else {
 
             // CASE 0: frame-to-frame
@@ -636,11 +648,11 @@ bool VisualOdometry::MainLoop() {
             best_transform(2,3) /= norm_t;
 
             std::cout << best_transform << std::endl;
-            double scale1 = findScaleLinear(best_transform,
+            init_scale = findScaleLinear(best_transform,
                                             objectpoints,
                                             imagepoints);
 
-            std::cout << "Scale current: " << scale1 << std::endl;
+            std::cout << "Scale current: " << init_scale << std::endl;
 
 
             // Update total points/cloud
@@ -685,8 +697,6 @@ bool VisualOdometry::MainLoop() {
 
 
             epnp = true;
-
-
         }
         frame_nr++;
     }
