@@ -30,4 +30,10 @@ src/build*
 *.log
 *.out
 *.toc
+*.dvi
+*.nav
+*.snm
+*.pdf
 
+CMakeCache.txt
+CMakeFiles
