@@ -9,34 +9,82 @@ Auke Wiggers\\6036163\\\url{A.J.Wiggers@uva.nl}}
 robots.\\Project AI\\Artificial Intelligence\\Faculty of Science\\ University
 of Amsterdam}
 
+\usepackage{graphicx}
+
 \begin{document}
 
-\begin{frame}[Visual Odometry on the Nao]
-	nao image
+\begin{frame}[Monocular Visual Odometry on the Nao]
+	% image of Nao
+	\includegraphics[scale=.3]{images/nao-head}
 
-	why odometry?
-	freely-moving agents need to know where they are
-	execution of planning in real world always introduces errors
+	Odometry is the use of data from moving sensors to estimate change in
+	position over time.
+\end{frame}
 
-	why visual?
+\begin{frame}[Why Odometry?]
+	\begin{itemize}
+		\item Freely-moving agents need to know where they are
+		\item Execution of plan in real world always introduces errors
+	\end{itemize}
+\end{frame}
+
+\begin{frame}[Why Visual?]
 	Alternatives: sonar, laser range, GPS
 
 	cameras are cheap, abundant, light, passive sensors
 	cameras work indoors
 \end{frame}
 
-\begin{frame}
-	calibration
-	descriptor & feature extraction
-	homography & keyframe selection
-	egomotion
-	reconstruction & scale
-	image-to-image
-	image-to-world
+\begin{frame}[Using Camera Input for Odometry]
+	\begin{itemize}
+		\item Construct 3D representation from 2D images to determine camera
+			position
+		\item Needs to be fast enough for real-time computation
+	\end{itemize}
 \end{frame}
 
+\begin{frame}[Calibration]
+	Camera input is distorted (i.e. lines are not straight in corners)
+
+	% TODO chessboard image
+\end{frame}
+
+\begin{frame}[Calibration]
+	Use `chessboard' of known size
+	\begin{itemize}
+		\item find distortion coefficients
+		\item find camera matrix (expresses focal length in pixels)
+	\end{itemize}
+
+	% TODO distorted/undistorted image here
+\end{frame}
+
+\begin{frame}[Descriptors]
+	To reconstruct 3D world we need to match points between images
+	\begin{enumerate}
+		\item find salient points
+		\item make descriptor of points (using BRISK features: fast and robust)
+		\item match points, discard unlikely matches (with RANSAC)
+	\end{enumerate}
+\end{frame}
+
+\begin{frame}[Homography]
+	find positions of 2D points in 3D
+	Images need to be sufficiently different for homography
+	need keyframe selection to guarantee reliable reconstruction:
+	* (mean shift - total shift):
+	  near 0 indicates rotation of camera: does not contain 3D information
+\end{frame}
+
+% homography & keyframe selection
+% egomotion
+% reconstruction & scale
+% image-to-image
+% image-to-world
+
+
 \bibliographystyle{plainnat}
-\bibliography{references}
+\bibliography{../report/references}
 
 \end{document}
 % vim: set spell : spelllang=en_gb :
