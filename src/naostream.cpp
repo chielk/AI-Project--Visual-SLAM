@@ -797,7 +797,9 @@ double VisualOdometry::findScaleLinear(cv::Matx34d &Pcam,
         b.at<double>(i*2,   0) = temp1(0);
         b.at<double>(i*2+1, 0) = temp1(1);
     }
-    scale = (double)((cv::Mat)((cv::Mat(A.t() * A)) * A.t() *b)).at<double>(0,0);
+
+    cv::Mat scalemat = ((A.t() * b) / (A.t() * A));
+    scale = scalemat.at<double>(0, 0);
 
     Pcam(0,3) *= scale;
     Pcam(1,3) *= scale;
