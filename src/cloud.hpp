@@ -1,6 +1,7 @@
 #ifndef CLOUD_H
 #define CLOUD_H
 #include <opencv2/core/core.hpp>
+#include <opencv2/features2d/features2d.hpp>
 #include <stdio.h>
 #include <time.h>
 #include <vector>
@@ -10,24 +11,26 @@ template <class point> class Cloud
 {
     public:
         void remove(int index);
-        void remove(int, point &p, uchar &d, int &f);
+        void remove(int, point &p, cv::KeyPoint &kp, uchar &d, int &f);
         void remove_last(int);
         void remove_frame(int);
-        void add(std::vector<point>, cv::Mat, int frame_nr);
-        void replace(std::vector<point>, cv::Mat, int frame_nr);
-        void get(int frame,
-                typename std::vector<point>::iterator &p_begin,
-                typename std::vector<point>::iterator &p_end,
-                cv::Mat &d);
+        void add(std::vector<point>, std::vector<cv::KeyPoint>, cv::Mat, int frame_nr);
+        void replace(std::vector<point>, std::vector<cv::KeyPoint> kpts, cv::Mat, int frame_nr);
+        //void get(int frame,
+        //        typename std::vector<point>::iterator &p_begin,
+        //        typename std::vector<point>::iterator &p_end,
+        //        cv::Mat &d);
         void get_points(std::vector<point> &pts);
+        void get_keypoints(std::vector<cv::KeyPoint> &kpts);
         void get_descriptors(cv::Mat &dscs);
         void get_frames(std::vector<int> &fs);
         void show_cloud(pcl::visualization::CloudViewer &viewer, int seconds);
         Cloud();
-        Cloud(std::vector<point>, cv::Mat);
+        Cloud(std::vector<point> pt, std::vector<cv::KeyPoint> kp, cv::Mat dscr);
         ~Cloud();
     private:
         std::vector<point> points;
+        std::vector<cv::KeyPoint> keypoints;
         cv::Mat descriptors;
         std::vector<int> frames;
         void vec2cloud(std::vector<cv::Point3d> point_vector,
@@ -43,17 +46,18 @@ Cloud<point>::Cloud()
 }
 
    template <class point>
-Cloud<point>::Cloud(std::vector<point> ps, cv::Mat ds)
+Cloud<point>::Cloud(std::vector<point> ps, std::vector<cv::KeyPoint> kp, cv::Mat ds)
 {
    points = ps;
+   keypoints = kp;
    descriptors = ds;
 }
 
    template <class point>
-void Cloud<point>::remove(int index, point &p, uchar &d, int &f)
+void Cloud<point>::remove(int index, point &p, cv::KeyPoint &kp, uchar &d, int &f)
 {
    p = points.erase(points.begin()+index);
-   //d = descriptors.erase(descriptors.begin()+index);
+   kp = keypoints.erase(keypoints.begin()+index);
    cv::hconcat(descriptors.colRange(0, index),
                descriptors.colRange(index+1, descriptors.rows),
                descriptors);
@@ -64,6 +68,7 @@ template <class point>
 void Cloud<point>::remove(int index)
 {
    points.erase(points.begin()+index);
+   keypoints.erase(keypoints.begin()+index);
    //descriptors.erase(descriptors.begin()+index);
    cv::hconcat(descriptors.colRange(0, index),
                descriptors.colRange(index+1, descriptors.rows),
@@ -72,16 +77,20 @@ void Cloud<point>::remove(int index)
 }
 
 template <class point>
-void Cloud<point>::replace(std::vector<point> pts, cv::Mat dscs, int frame_nr)
+void Cloud<point>::replace(std::vector<point> pts,
+                           std::vector<cv::KeyPoint> kpts,
+                           cv::Mat dscs,
+                           int frame_nr)
 {
    points = pts;
    dscs.copyTo(descriptors);
+   keypoints = kpts;
    std::vector<int> fs(pts.size(), frame_nr);
    frames = fs;
 }
 
 template <class point>
-void Cloud<point>::add(std::vector<point> pts, cv::Mat dscs, int frame_nr)
+void Cloud<point>::add(std::vector<point> pts, std::vector<cv::KeyPoint>, cv::Mat dscs, int frame_nr)
 {
    points.insert(points.end(), pts.begin(), pts.end());
    //descriptors.insert(descriptors.end(), dscs.begin(), dscs.end());
@@ -102,6 +111,7 @@ void Cloud<point>::remove_last(int n)
       return;
    }
    points.erase(points.begin()+n);
+   keypoints.erase(keypoints.begin()+n);
    descriptors = descriptors(cv::Range(0, 0), cv::Range(n, 1));
    frames.erase(frames.begin()+n);
 }
@@ -124,6 +134,13 @@ void Cloud<point>::get_frames(std::vector<int> &fs)
     fs = frames;
 }
 
+template <class point>
+void Cloud<point>::get_keypoints(std::vector<cv::KeyPoint>& kpts)
+{
+    kpts = keypoints;
+}
+
+/**
 template <class point>
 void Cloud<point>::get(int frame,
         typename std::vector<point>::iterator &p_begin,
@@ -153,6 +170,7 @@ void Cloud<point>::get(int frame,
     //d_end = descriptors.end();
     d = descriptors(d_begin, d_end);
 }
+**/
 
 template <class point>
 Cloud<point>::~Cloud()
