@@ -26,7 +26,10 @@ of Amsterdam}
 	\begin{center}
 		\includegraphics[scale=.3]{images/nao-head}
 	\end{center}
-	Chiel Kooijman, Steven Laan, Camiel Verschoor \& Auke Wiggers
+
+	\begin{center}
+		Chiel Kooijman, Steven Laan, Camiel Verschoor \& Auke Wiggers
+	\end{center}
 \end{frame}
 
 \begin{frame}{Why Odometry?}
@@ -36,8 +39,8 @@ of Amsterdam}
 	\end{quote}
 
 	\begin{itemize}
-		\item Freely-moving agents need to know where they are
-		\item Execution of plan in real world always introduces errors
+		\item Freely-moving agents need to know where they are to execute plan
+		\item Movement in the real world is always subject to errors
 	\end{itemize}
 \end{frame}
 
@@ -45,13 +48,15 @@ of Amsterdam}
 	Alternatives:
 	\begin{itemize}
 		\item Sonar
-		\item Laser
-		\item Range
+		\item Laser range scanner
 		\item GPS
 	\end{itemize}
 
-	Cameras are cheap, abundant, light, passive sensors\\
-	Cameras work indoors
+	Cameras:
+	\begin{itemize}
+		\item Are cheap, abundant, light, passive sensors
+		\item	Work indoors
+	\end{itemize}
 \end{frame}
 
 \begin{frame}{Using Camera Input for Odometry}
@@ -95,8 +100,34 @@ of Amsterdam}
 	  near 0 indicates rotation of camera: does not contain 3D information
 \end{frame}
 
+\begin{frame}{Scale Ambiguity}
+	
+\end{frame}
+
+\begin{frame}
+	Initialize:
+	\begin{enumerate}
+		\item Calibrate (or use previous calibration parameters)
+		\item Create initial 3D points from 2 images (world coordinates)
+		\item Set camera position to $\vec{0}$
+			\newcounter{enumTemp}
+			\setcounter{enumTemp}{\theenumi}
+	\end{enumerate}
+	Loop:
+	\begin{enumerate}
+			 \setcounter{enumi}{\theenumTemp}
+		\item Create new 3D points (image-to-image)
+		\item Find position of camera relative to world coordinates (PnP)
+		\item Find scale of new relative to world
+		\item Translate \& scale new points to world
+		\item Add to world coordinates
+	\end{enumerate}
+\end{frame}
+
+
 % homography & keyframe selection
 % egomotion
+% 8-point algorithm?
 % reconstruction & scale
 % image-to-image
 % image-to-world
