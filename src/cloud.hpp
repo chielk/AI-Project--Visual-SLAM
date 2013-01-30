@@ -140,37 +140,37 @@ void Cloud<point>::get_keypoints(std::vector<cv::KeyPoint>& kpts)
     kpts = keypoints;
 }
 
-/**
 template <class point>
 void Cloud<point>::get(int frame,
-        typename std::vector<point>::iterator &p_begin,
-        typename std::vector<point>::iterator &p_end,
+        typename std::vector<point> &p,
+        typename std::vector<KeyPoint> &k,
         cv::Mat &d)
 {
     std::vector<int>::iterator f = frames.begin();
+    std::vector<point>::iterator p_begin;
+    std::vector<KeyPoint>::iterator k_begin;
     int i = 0;
     cv::Range d_begin, d_end;
     for(; f != frames.end(); f++, i++) {
         if (*f == frame) {
             p_begin = points.begin() + i;
-            //d_begin = descriptors.begin() + i;
+            k_begin = keypoints.begin() + i;
             d_begin = cv::Range(i, 0);
             break;
         }
     }
     for(; f != frames.end(); f++, i++) {
         if (*f != frame) {
-            p_end = points.begin() + i;
-            //d_end = descriptors.begin() + i;
+            p = std::vector<point>(p_begin, points.begin() + i);
+            k = std::vector<KeyPoint>(k_begin, points.begin() + i);
             d_end = cv::Range(i, 1);
             return;
         }
     }
-    p_end = points.end();
-    //d_end = descriptors.end();
+    p = std::vector<point>(p_begin, points.end());
+    k = std::vector<KeyPoint>(k_begin, keypoints.end());
     d = descriptors(d_begin, d_end);
 }
-**/
 
 template <class point>
 Cloud<point>::~Cloud()
