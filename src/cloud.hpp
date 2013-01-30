@@ -71,6 +71,15 @@ void Cloud<point>::remove(int index)
 }
 
 template <class point>
+void Cloud<point>::replace(std::vector<point> pts, cv::Mat dscs, int frame_nr)
+{
+   points = pts;
+   dscs.copyTo(descriptors);
+   std::vector<int> fs(pts.size(), frame_nr);
+   frames = fs;
+}
+
+template <class point>
 void Cloud<point>::add(std::vector<point> pts, cv::Mat dscs, int frame_nr)
 {
    points.insert(points.end(), pts.begin(), pts.end());
