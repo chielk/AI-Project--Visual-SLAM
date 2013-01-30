@@ -48,13 +48,14 @@ of Amsterdam}
 	Alternatives:
 	\begin{itemize}
 		\item Sonar
+		\item Radar
 		\item Laser range scanner
 		\item GPS
 	\end{itemize}
 
 	Cameras:
 	\begin{itemize}
-		\item Are cheap, abundant, light, passive sensors
+		\item Are cheap, abundant, light, small, efficient, passive sensors
 		\item	Work indoors
 	\end{itemize}
 \end{frame}
@@ -70,7 +71,10 @@ of Amsterdam}
 \begin{frame}{Calibration}
 	Camera input is distorted (i.e. lines are not straight in corners)
 
-	% TODO chessboard image
+	\begin{center}
+		\includegraphics[width=.5\linewidth]{images/image-distorted}
+		\includegraphics[width=.5\linewidth]{images/image-undistorted}
+	\end{center}
 \end{frame}
 
 \begin{frame}{Calibration}
@@ -80,11 +84,7 @@ of Amsterdam}
 		\item Find camera matrix (expresses focal length in pixels)
 	\end{itemize}
 
-	\begin{center}
-		\includegraphics[width=.5\linewidth]{images/image-distorted}
-		\includegraphics[width=.5\linewidth]{images/image-undistorted}
-	\end{center}
-	% TODO distorted/undistorted image here
+	% TODO chessboard image
 \end{frame}
 
 \begin{frame}{Descriptors}
@@ -114,7 +114,8 @@ of Amsterdam}
 	Initialize:
 	\begin{enumerate}
 		\item Calibrate (or use previous calibration parameters)
-		\item Create initial 3D points from 2 images (world coordinates)
+		\item Create initial 3D points from 2 images with normalized 8-point
+			algorithm \cite{longuet1981, Hartley2000}
 		\item Set camera position to $\vec{0}$
 			\newcounter{enumTemp}
 			\setcounter{enumTemp}{\theenumi}
@@ -133,7 +134,7 @@ of Amsterdam}
 
 % homography & keyframe selection
 % egomotion
-% 8-point algorithm?
+% 8-point algorithm? 
 % reconstruction & scale
 % image-to-image
 % image-to-world
