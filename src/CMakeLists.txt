@@ -15,7 +15,7 @@ set(_controller_srcs
   inputsource.hpp
 )
 
-set(_salvo_srcs
+set(_navigate_srcs
   naostream.cpp
   inputsource.cpp
   inputsource.hpp
@@ -23,13 +23,12 @@ set(_salvo_srcs
 )
     
 qi_create_bin(controller ${_controller_srcs})
-qi_create_bin(salvo ${_salvo_srcs})
+qi_create_bin(navigate ${_navigate_srcs})
 
-
-include_directories(${PCL_INCLUDE_DIRS})
+include_directories( ${PCL_INCLUDE_DIRS} )
 link_directories( ${PCL_LIBRARY_DIRS} )
-add_definitions(${PCL_DEFINITIONS})
-target_link_libraries(salvo ${PCL_VISUALIZATION_LIBRARIES} ${PCL_COMMON_LIBRARIES})
+add_definitions( ${PCL_DEFINITIONS} )
+target_link_libraries( navigate ${PCL_VISUALIZATION_LIBRARIES} ${PCL_COMMON_LIBRARIES} )
 
 # Here we say that our executable depends on
 # - ALCOMMON (main naoqi lib)
@@ -39,4 +38,4 @@ target_link_libraries(salvo ${PCL_VISUALIZATION_LIBRARIES} ${PCL_COMMON_LIBRARIE
 # It automatically links with the corresponding libraries and makes their headers
 # available.
 qi_use_lib(controller ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI OPENCV2_IMGPROC OPENCV2_calib3d )
-qi_use_lib(salvo ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI OPENCV2_IMGPROC OPENCV2_calib3d OPENCV2_features2d )
+qi_use_lib(navigate ALCOMMON ALVISION OPENCV2_CORE OPENCV2_HIGHGUI OPENCV2_IMGPROC OPENCV2_calib3d OPENCV2_features2d )

@@ -408,7 +408,8 @@ bool VisualOdometry::MainLoop() {
 
             //////////////////////////////////
             // Triangulate any (yet) unknown points
-            matcher.match( current_descriptors, total_2D_descriptors, matches );
+            cloud_2D.get_descriptors(total_2D_descriptors);
+            matcher.match(current_descriptors, total_2D_descriptors, matches);
             std::vector<cv::Point2d> matching_2D_points, current_points;
 
             for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
@@ -439,19 +440,6 @@ bool VisualOdometry::MainLoop() {
     #endif
                 continue;
             }
-
-            // Compute essential matrix
-            cv::Matx33d E (cv::Mat(K.t() * fundamental * K));
-
-            // Estimation of projection matrix
-            cv::Mat R1, R2, t;
-            if( !DecomposeEtoRandT( E, R1, R2, t ) ) {
-                return false;
-            }
-
-            // Check correctness(!(cv::Mat(visualOdometry->K).empty()))
-            if ( cv::determinant(R1) < 0 ) R1 = -R1;
-            if ( cv::determinant(R2) < 0 ) R2 = -R2;
 
 
        // Add to all_descriptors and 3d point cloud
