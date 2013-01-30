@@ -13,15 +13,28 @@ of Amsterdam}
 
 \begin{document}
 
-\begin{frame}{Monocular Visual Odometry on the Nao}
-	% image of Nao
-	\includegraphics[scale=.3]{images/nao-head}
+\begin{frame}
+	\begin{center}
+		{\LARGE NAVIGATE}
+	\end{center}
 
-	Odometry is the use of data from moving sensors to estimate change in
-	position over time.
+	\begin{center}
+		\textsc{Nao Visual Gait And Trajectory Estimation:}\\
+		\textsc{\small Monocular Visual Odometry on the Nao}
+	\end{center}
+
+	\begin{center}
+		\includegraphics[scale=.3]{images/nao-head}
+	\end{center}
+	Chiel Kooijman, Steven Laan, Camiel Verschoor \& Auke Wiggers
 \end{frame}
 
 \begin{frame}{Why Odometry?}
+	\begin{quote}
+		Odometry is the use of data from moving sensors to estimate change in
+		position over time.
+	\end{quote}
+
 	\begin{itemize}
 		\item Freely-moving agents need to know where they are
 		\item Execution of plan in real world always introduces errors
@@ -29,10 +42,16 @@ of Amsterdam}
 \end{frame}
 
 \begin{frame}{Why Visual?}
-	Alternatives: sonar, laser range, GPS
+	Alternatives:
+	\begin{itemize}
+		\item Sonar
+		\item Laser
+		\item Range
+		\item GPS
+	\end{itemize}
 
-	cameras are cheap, abundant, light, passive sensors
-	cameras work indoors
+	Cameras are cheap, abundant, light, passive sensors\\
+	Cameras work indoors
 \end{frame}
 
 \begin{frame}{Using Camera Input for Odometry}
@@ -50,10 +69,10 @@ of Amsterdam}
 \end{frame}
 
 \begin{frame}{Calibration}
-	Use `chessboard' of known size
+	Use `chessboard' of known size:
 	\begin{itemize}
-		\item find distortion coefficients
-		\item find camera matrix (expresses focal length in pixels)
+		\item Find distortion coefficients
+		\item Find camera matrix (expresses focal length in pixels)
 	\end{itemize}
 
 	% TODO distorted/undistorted image here
@@ -62,9 +81,9 @@ of Amsterdam}
 \begin{frame}{Descriptors}
 	To reconstruct 3D world we need to match points between images
 	\begin{enumerate}
-		\item find salient points
-		\item make descriptor of points (using BRISK features: fast and robust)
-		\item match points, discard unlikely matches (with RANSAC)
+		\item Find salient points
+		\item Make descriptor of points (using BRISK features: fast and robust)
+		\item Match points, discard unlikely matches (with RANSAC)
 	\end{enumerate}
 \end{frame}
 
