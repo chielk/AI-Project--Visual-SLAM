@@ -239,7 +239,7 @@ void NaoController::stand()
     motProxy->walkTo(0.01, 0.0, 0.0);
 
     AL::ALValue headPitchName = "HeadPitch";
-    AL::ALValue headPitchAngle = 0.0;
+    AL::ALValue headPitchAngle = 0.3;
     AL::ALValue headPitchSpeed = 0.5;
     motProxy->setAngles(headPitchName, headPitchAngle, headPitchSpeed);
 

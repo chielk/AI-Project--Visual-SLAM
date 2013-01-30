@@ -34,14 +34,14 @@
 #define RED cv::Scalar( 0, 0, 255 )
 #define EPSILON 0.0001
 #define THRESHOLD 0.20
-#define VERBOSE 0
+#define VERBOSE 1
 
 #define _BRISK 0
 #define _FREAK 1
 #define _ORB   2
 
 #define _FEATURE _BRISK
-#define HARTLEY_TRIANGULATION
+#define HARTLEY_TRIANGULATION 1
 
 enum DMMethod { 
     TS_MS, // Total Shift - Mean Shift
@@ -49,6 +49,13 @@ enum DMMethod {
     TOTAL_SHIFT
 };
 typedef std::vector<cv::KeyPoint> KeyPointVector;
+
+void KeypointsToPoints(KeyPointVector keypoints, std::vector<cv::Point2d> &points) {
+    for( int i = 0; i < keypoints.size(); i++ ) {
+        points.push_back( keypoints[i].pt );
+    }
+}
+
 
 class VisualOdometry
 {
@@ -70,8 +77,12 @@ class VisualOdometry
 
     bool GetCameraMatrixHorn( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t );
     bool DecomposeEtoRandT( cv::Matx33d &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t );
-    void FindBestRandT(KeyPointVector &previous_keypoints, KeyPointVector &current_keypoints, std::vector<cv::DMatch> &matches,
-                       cv::Mat &R1, cv::Mat &R2, cv::Mat &t, std::vector<cv::Point3d> &best_X, cv::Matx34d &best_transform);
+
+    void FindBestRandT( std::vector<cv::Point2d> &previous_points,
+                        std::vector<cv::Point2d> &current_keypoints,
+                        cv::Mat &R1, cv::Mat &R2, cv::Mat &t,
+                        std::vector<cv::Point3d> &best_X,
+                        cv::Matx34d &best_transform );
 
     void SolvePnPUsingRansac( std::vector<cv::DMatch> matches,
                               KeyPointVector current_keypoints,
@@ -83,8 +94,15 @@ class VisualOdometry
     void determineRollPitchYaw(double &roll, double &pitch, double &yaw, cv::Matx34d RTMatrix);
     double distanceMeasure( KeyPointVector kpv1, KeyPointVector kpv2, DMMethod method );
     double findScaleLinear(cv::Matx34d &Pcam, cv::Mat &points3d, cv::Mat &points2d);
-    void triangulatePoints(KeyPointVector &previous_keypoints, KeyPointVector &current_keypoints,
-            std::vector<cv::DMatch> &matches, cv::Mat Kinv, cv::Matx34d P1, cv::Matx34d P2, std::vector<cv::Point3d> &X);
+    void TriangulatePoints(std::vector<cv::Point2d> &previous_points,
+                           std::vector<cv::Point2d> &current_points,
+                           cv::Matx34d &P1, cv::Matx34d &P2, std::vector<cv::Point3d> &X);
+
+    void DetermineNewOutliers(std::vector<cv::DMatch> &matches,
+                              std::vector<cv::Point2d> &current_points,
+                              cv::Mat &current_descriptors,
+                              std::vector<cv::Point2d> &current_outlier_points_2d,
+                              cv::Mat &current_outlier_descriptors_2d);
 
 public:
     VisualOdometry(InputSource *source);
@@ -105,11 +123,11 @@ double VisualOdometry::determineFundamentalMatrix(std::vector<cv::Point2d> &prev
                                                   std::vector<cv::DMatch> &matches,
                                                   cv::Matx33d &F)
 {
-    double minVal, maxVal;
     std::vector<uchar> status( matches.size() );
     std::vector<cv::DMatch> good_matches;
     double mean_distance = 0.0;
 
+    double minVal, maxVal;
     cv::minMaxIdx( previous_points, &minVal, &maxVal );
 
     // Find the fundamental matrix
@@ -352,7 +370,6 @@ bool VisualOdometry::MainLoop() {
     Cloud<cv::Point2d> cloud_2D;
 
     int frame_nr = 0;
-    KeyPointVector total_2D_keypoints;
     cv::Mat total_3D_descriptors;
     cv::Mat total_2D_descriptors;
 
@@ -395,58 +412,99 @@ bool VisualOdometry::MainLoop() {
         if (epnp)
         {
             // CASE 1: SolvePnP
-            std::cout << current_descriptors.size() << "   " << total_3D_descriptors.size() << std::endl;
-
             cloud_3D.get_descriptors(total_3D_descriptors);
+            matches.clear();
             matcher.match( current_descriptors, total_3D_descriptors, matches );
+
+            // Determine minimum distance and derive good matches from it
+            double minDist = matches[0].distance;
+            for(match_it = matches.begin(); match_it != matches.end(); match_it++) {
+                if(match_it->distance < minDist) minDist = match_it->distance;
+            }
+            std::vector<cv::DMatch> good_matches;
+            for(match_it = matches.begin(); match_it != matches.end(); match_it++) {
+                if(match_it->distance < 2*minDist) {
+                    good_matches.push_back( *match_it );
+                }
+            }
+# if VERBOSE
+            std::cout << "Before pruning " << matches.size()
+                      << " matches, after " << good_matches.size() << "." << std::endl;
+#endif
 
             // determine correct keypoints and corresponding 3d positions
             std::vector<cv::Point3d> points_3d;
             cloud_3D.get_points(points_3d);
             std::vector<cv::Point2d> imagepoints;
             std::vector<cv::Point3d> objectpoints;
-            SolvePnPUsingRansac(matches, current_keypoints, points_3d, imagepoints, objectpoints, P2);
+            SolvePnPUsingRansac(good_matches, current_keypoints, points_3d, imagepoints, objectpoints, P2);
 
             std::cout << P2 << std::endl;
 
             //////////////////////////////////
             // Triangulate any (yet) unknown points
             cloud_2D.get_descriptors(total_2D_descriptors);
-            matcher.match(current_descriptors, total_2D_descriptors, matches);
-            std::vector<cv::Point2d> matching_2D_points, current_points;
+            if(!total_2D_descriptors.empty()) {
+                matches.clear();
+                matcher.match(current_descriptors, total_2D_descriptors, matches);
+                std::vector<cv::Point2d> matching_2D_points, current_points, total_2D_points;
+                cloud_2D.get_points(total_2D_points);
 
-            for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
-                current_points.push_back( current_keypoints[match_it->queryIdx].pt );
-                matching_2D_points.push_back( total_2D_keypoints[match_it->trainIdx].pt );
-            }
-
-            cv::Matx33d fundamental;
-            std::vector<cv::Point2d> previous_points_inliers, current_points_inliers;
-
-            double mean_distance = determineFundamentalMatrix(matching_2D_points,
-                                                          current_points,
-                                                          previous_points_inliers,
-                                                          current_points_inliers,
-                                                          matches,
-                                                          fundamental);
-
-            // If displacement is not sufficiently large, skip this image.
-            if (mean_distance < THRESHOLD)
-            {
-                if (mean_distance < 1)
-                {
-                    // what the fuck just happened
-                    std::cout << "wut 0 mean_distance wut" << std::endl;
+                for ( match_it = matches.begin(); match_it != matches.begin() + current_descriptors.rows; match_it++ ) {
+                    current_points.push_back( current_keypoints[match_it->queryIdx].pt );
+                    matching_2D_points.push_back( total_2D_points[match_it->trainIdx] );
                 }
-    #if VERBOSE
-                std::cout << "Displacement not sufficiently large, skipping frame." << std::endl;
-    #endif
-                continue;
+
+                cv::Matx33d fundamental;
+                std::vector<cv::Point2d> previous_points_inliers, current_points_inliers;
+                double mean_distance = determineFundamentalMatrix(matching_2D_points,
+                                                                  current_points,
+                                                                  previous_points_inliers,
+                                                                  current_points_inliers,
+                                                                  matches,
+                                                                  fundamental);
+
+                std::vector<cv::Point2d> current_outlier_points_2d;
+                cv::Mat current_outlier_descriptors_2d;
+
+                DetermineNewOutliers(matches,
+                                     current_points,
+                                     current_descriptors,
+                                     current_outlier_points_2d,
+                                     current_outlier_descriptors_2d);
+
+                cloud_2D.add(current_outlier_points_2d, current_outlier_descriptors_2d, frame_nr);
+
+                // If displacement is not sufficiently large, skip this image.
+                if (mean_distance < THRESHOLD)
+                {
+                    if (mean_distance < 1)
+                    {
+                        // what the fuck just happened
+                        std::cout << "wut 0 mean_distance wut" << std::endl;
+                    }
+        #if VERBOSE
+                    std::cout << "Displacement not sufficiently large, skipping frame." << std::endl;
+        #endif
+                    continue;
+                }
+
+                std::vector<cv::Point3d> X;
+                TriangulatePoints(matching_2D_points,
+                                  current_points,
+                                  P1,
+                                  P2,
+                                  X);
+
+                //cloud_3D.add(X, , frame_nr);
+
+           // Add to all_descriptors and 3d point cloud
+            } else {
+                // If no 2d points available, add all current points to the cloud.
+                std::vector<cv::Point2d> current_points;
+                KeypointsToPoints(current_keypoints, current_points);
+                cloud_2D.add(current_points, current_descriptors, frame_nr);
             }
-
-
-       // Add to all_descriptors and 3d point cloud
-
 
         } else {
 
@@ -526,6 +584,24 @@ bool VisualOdometry::MainLoop() {
                                                               matches,
                                                               F);
 
+
+
+            // Add outliers to the 2d cloud of unused features
+            std::vector<cv::Point2d> all_points_current, all_points_previous;
+            KeypointsToPoints( current_keypoints, all_points_current );
+            KeypointsToPoints( previous_keypoints, all_points_previous );
+
+            std::vector<cv::Point2d> current_outlier_points_2d;
+            cv::Mat current_outlier_descriptors_2d;
+
+            DetermineNewOutliers(matches,
+                                 all_points_current,
+                                 current_descriptors,
+                                 current_outlier_points_2d,
+                                 current_outlier_descriptors_2d);
+
+            cloud_2D.add(current_outlier_points_2d, current_outlier_descriptors_2d, frame_nr);
+
             // Scale up again
             F = current_T.t() * F * previous_T;
 
@@ -577,22 +653,24 @@ bool VisualOdometry::MainLoop() {
             std::vector<cv::Point3d> best_X;
             cv::Matx34d best_transform;
 
+            std::vector<cv::Point2d> cpoints, ppoints;
+            for ( size_t m = 0; m < matches.size(); m++ ) {
+                cpoints.push_back( current_keypoints[matches[m].queryIdx].pt );
+                ppoints.push_back( previous_keypoints[matches[m].trainIdx].pt );
+            }
 
-            FindBestRandT(previous_keypoints, current_keypoints, matches, R1, R2, t, best_X, best_transform);
+            FindBestRandT(ppoints, cpoints, R1, R2, t, best_X, best_transform);
 
-#if 1//VERBOSE
+#if VERBOSE
             std::cout << "Best found transformation\n" << best_transform << "\n" << std::endl;
+            for ( size_t x  = 0; x < best_X.size(); x++ ) {
+                std::cout << ppoints[x] << "\t" << cpoints[x] << "\t" << best_X[x] << std::endl;
+            }
 #endif
 #if VISUALIZE
             // Display found points
             cloud_3D.show_cloud(viewer, 3);
 #endif
-#if VERBOSE
-            for ( size_t x  = 0; x < best_X.size().height; x++ ) {
-                std::cout << best_X[x] << std::endl;
-            }
-#endif
-
             /**
              *  Input  - Pcam  -> (3x4) Camera position
              *         - X3D   -> (3xn) 3D points
@@ -633,13 +711,10 @@ bool VisualOdometry::MainLoop() {
 
             // Update total points/cloud
             std::cout << "Storing points" << std::endl;
-            //total_3D_pointcloud = best_X;
-            total_3D_descriptors = cv::Mat(current_descriptors.size().height, matches.size(), current_descriptors.type());
+            total_3D_descriptors = cv::Mat( matches.size(), current_descriptors.size().width, current_descriptors.type());
             for ( size_t matchnr = 0; matchnr < matches.size(); matchnr++) {
-                 total_3D_descriptors.col(matchnr) = current_descriptors.col(matchnr);
+                 total_3D_descriptors.row(matchnr) = current_descriptors.row(matchnr);
             }
-            std::cout << current_descriptors.size() << "\n" << total_3D_descriptors.size() << "\n" << std::endl;
-
             cloud_3D.add(best_X, total_3D_descriptors, frame_nr);
             
             // TODO BE SMART
@@ -902,23 +977,34 @@ void VisualOdometry::SolvePnPUsingRansac( std::vector<cv::DMatch> matches,
                                           std::vector<cv::Point2d> &imagepoints,
                                           std::vector<cv::Point3d> &objectpoints,
                                           cv::Matx34d& transformationmatrix) {
-    cv::Point2d cp;
+    cv::Point2d ip;
     cv::Point3d op;
-    for (int i = 0; i < matches.size(); i++) {
-        cp = current_keypoints[matches[i].queryIdx].pt;
-        op = total_3D_pointcloud[matches[i].trainIdx];
+    cv::Point3f op_float;
+    cv::Point2f ip_float;
+    std::vector<cv::Point3f> objectpoints_float;
+    std::vector<cv::Point2f> imagepoints_float;
 
-        imagepoints.push_back(cp);
+    for (int i = 0; i < matches.size(); i++) {
+        ip = current_keypoints[matches[i].queryIdx].pt;
+        ip_float = cv::Point2f( ip.x, ip.y );
+        op = total_3D_pointcloud[matches[i].trainIdx];
+        op_float = cv::Point3f( op.x, op.y, op.z );
+
+        imagepoints.push_back(ip);
+        imagepoints_float.push_back(ip_float);
         objectpoints.push_back(op);
+        objectpoints_float.push_back(op_float);
     }
 
     cv::Mat rvec, tvec, inliers;
-    cv::solvePnPRansac(objectpoints, imagepoints, K, distortionCoeffs, rvec, tvec,
+    cv::solvePnPRansac(objectpoints_float, imagepoints_float, K, distortionCoeffs, rvec, tvec,
                        false, 100, 8.0, 100, inliers);
+
 
     // Construct matrix [R|t]
     cv::Matx33d R;
     cv::Rodrigues(rvec, R);
+    std::cout << R << std::endl;
     cv::hconcat(R, tvec, transformationmatrix);
 }
 
@@ -926,9 +1012,11 @@ void VisualOdometry::SolvePnPUsingRansac( std::vector<cv::DMatch> matches,
   * Find best transformation matrix best_transform, with corresponding triangulationpoints best_X, based
   * on candidates R1,R2 and t, and the points in the image that were not rejected by RANSAC.
   */
-void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointVector &current_keypoints,
-                                   std::vector<cv::DMatch> &matches, cv::Mat &R1, cv::Mat &R2,
-                                   cv::Mat &t, std::vector<cv::Point3d> &best_X, cv::Matx34d &best_transform)
+void VisualOdometry::FindBestRandT(std::vector<cv::Point2d> &previous_points,
+                                   std::vector<cv::Point2d> &current_points,
+                                   cv::Mat &R1, cv::Mat &R2, cv::Mat &t,
+                                   std::vector<cv::Point3d> &best_X,
+                                   cv::Matx34d &best_transform)
 {
     cv::Mat possible_projections[4];
     cv::hconcat( R1,  t, possible_projections[0] );
@@ -941,11 +1029,10 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
                     0, 1, 0, 0,
                     0, 0, 1, 0 );
     cv::Matx34d P2;
+    std::vector<cv::Point3d> X;
 
     double best_percentage = 0.0;
-
-    cv::Mat Kinv = (cv::Mat)K.inv();
-    std::vector<cv::Point3d> X;
+    double percentage;
 
     // Loop over possible candidates
     for ( int i = 0 ; i < 4; i++ ) {
@@ -953,14 +1040,13 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
         X.clear();
         P2 = possible_projections[i];
 
-        triangulatePoints(previous_keypoints,
-                current_keypoints,
-                Kinv,
-                P1,
-                P2,
-                X);
+        TriangulatePoints(previous_points,
+                          current_points,
+                          P1,
+                          P2,
+                          X);
 
-        double percentage = TestTriangulation(X, P2);
+        percentage = TestTriangulation(X, P2);
 
         if ( percentage > best_percentage ) {
             // update best values-so-far
@@ -971,19 +1057,20 @@ void VisualOdometry::FindBestRandT(KeyPointVector &previous_keypoints, KeyPointV
     }
 }
 
-void VisualOdometry::triangulatePoints(KeyPointVector &previous_keypoints,
-    KeyPointVector &current_keypoints, std::vector<cv::DMatch> &matches,
-    cv::Mat Kinv, cv::Matx34d P1, cv::Matx34d P2, std::vector<cv::Point3d> &X)
+void VisualOdometry::TriangulatePoints(std::vector<cv::Point2d> &previous_points,
+    std::vector<cv::Point2d> &current_points,
+    cv::Matx34d &P1, cv::Matx34d &P2, std::vector<cv::Point3d> &X)
 {
+    cv::Mat Kinv = (cv::Mat)K.inv();
 #if HARTLEY_TRIANGULATION
     // TODO replace by iterator?
-    for ( size_t m = 0; m < matches.size(); m++ ) {
-        cv::Point3d current_point_homogeneous( current_keypoints[matches[m].queryIdx].pt.x,
-                current_keypoints[matches[m].queryIdx].pt.y,
-                1 );
-        cv::Point3d previous_point_homogeneous( previous_keypoints[matches[m].trainIdx].pt.x,
-                previous_keypoints[matches[m].trainIdx].pt.y,
-                1 );
+    for ( size_t m = 0; m < previous_points.size(); m++ ) {
+        cv::Point3d current_point_homogeneous = cv::Point3d( current_points[m].x,
+                                                             current_points[m].y,
+                                                             1 );
+        cv::Point3d previous_point_homogeneous( previous_points[m].x,
+                                                previous_points[m].y,
+                                                1 );
 
         cv::Matx31d k_current_point ( (cv::Mat)(Kinv * cv::Mat( current_point_homogeneous )));
         current_point_homogeneous.x = k_current_point(0);
@@ -1003,20 +1090,40 @@ void VisualOdometry::triangulatePoints(KeyPointVector &previous_keypoints,
     }
 #else
     // Use opencvs triangulation method
-    std::vector<cv::Point2d> cpoints, ppoints;
-    for ( size_t m = 0; m < matches.size(); m++ ) {
-        cpoints.push_back( cv::Point2d ( current_keypoints[matches[m].queryIdx].pt.x,
-                    current_keypoints[matches[m].queryIdx].pt.y ) );
-        ppoints.push_back( cv::Point2d ( previous_keypoints[matches[m].trainIdx].pt.x,
-                    previous_keypoints[matches[m].trainIdx].pt.y ) );
-    }
-
     cv::Mat X_4d(4, cpoints.size(), CV_64F);
-    cv::triangulatePoints(P1, P2, cpoints, ppoints, X_4d);
-    for ( size_t m = 0; m < matches.size(); m++ ) {
-        X.push_back( cv::Point3d( X_4d.at<double>(0,m),
-                    X_4d.at<double>(1,m),
-                    X_4d.at<double>(2,m) ));
+    cv::triangulatePoints(P1, P2, previous_points, current_points, X_4d);
+    for ( size_t m = 0; cpoints.size(); m++ ) {
+        X.push_back( cv::Point3d( X_4d.at<double>(0, m),
+                                  X_4d.at<double>(1, m),
+                                  X_4d.at<double>(2, m) ));
     }
 #endif
+}
+
+void VisualOdometry::DetermineNewOutliers(std::vector<cv::DMatch> &matches,
+                                          std::vector<cv::Point2d> &current_points,
+                                          cv::Mat &current_descriptors,
+                                          std::vector<cv::Point2d> &current_outlier_points_2d,
+                                          cv::Mat &current_outlier_descriptors_2d)
+{
+    bool outlier;
+
+    // Loop over all points in previous to find ones that matches does not refer to.
+    for (int i = 0 ; i < current_points.size(); i++) {
+        outlier = true;
+        for(int j = 0; j < matches.size(); j++) {
+            if (matches[j].queryIdx == i)  {
+                outlier = false;
+                break;
+            }
+        }
+        if (outlier) {
+            current_outlier_points_2d.push_back( current_points[i] );
+            if(current_outlier_descriptors_2d.empty()) {
+                current_outlier_descriptors_2d = current_descriptors.row(i);
+            } else {
+                cv::vconcat(current_outlier_descriptors_2d, current_descriptors.row(i), current_outlier_descriptors_2d );
+            }
+        }
+    }
 }

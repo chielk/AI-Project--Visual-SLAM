@@ -53,8 +53,8 @@ void Cloud<point>::remove(int index, point &p, uchar &d, int &f)
 {
    p = points.erase(points.begin()+index);
    //d = descriptors.erase(descriptors.begin()+index);
-   cv::hconcat(descriptors.colrange(0, index),
-               descriptors.colrange(index+1, descriptors.rows),
+   cv::hconcat(descriptors.colRange(0, index),
+               descriptors.colRange(index+1, descriptors.rows),
                descriptors);
    f = frames.erase(frames.begin()+index);
 }
@@ -64,8 +64,8 @@ void Cloud<point>::remove(int index)
 {
    points.erase(points.begin()+index);
    //descriptors.erase(descriptors.begin()+index);
-   cv::hconcat(descriptors.colrange(0, index),
-               descriptors.colrange(index+1, descriptors.rows),
+   cv::hconcat(descriptors.colRange(0, index),
+               descriptors.colRange(index+1, descriptors.rows),
                descriptors);
    frames.erase(frames.begin()+index);
 }
@@ -75,7 +75,11 @@ void Cloud<point>::add(std::vector<point> pts, cv::Mat dscs, int frame_nr)
 {
    points.insert(points.end(), pts.begin(), pts.end());
    //descriptors.insert(descriptors.end(), dscs.begin(), dscs.end());
-   cv::hconcat(descriptors, dscs, descriptors);
+   if(descriptors.empty()) {
+       dscs.copyTo(descriptors);
+   } else {
+       cv::vconcat(descriptors, dscs, descriptors);
+   }
 
    std::vector<int> fs(pts.size(), frame_nr);
    frames.insert(frames.end(), fs.begin(), fs.end());
@@ -131,7 +135,7 @@ void Cloud<point>::get(int frame,
         if (*f != frame) {
             p_end = points.begin() + i;
             //d_end = descriptors.begin() + i;
-            d_end = cv::Range(i, 1)
+            d_end = cv::Range(i, 1);
             return;
         }
     }
